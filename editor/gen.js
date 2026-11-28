@@ -8,6 +8,8 @@
 // the session token and a signed-in team owner; GET drafts/<id> is the status poll (every 10 s while a job runs).
 // Routes: #/gen/ (drafts + the description form), #/gen/<kind> (the form for that kind), #/gen/d/<draft_id> (one draft),
 // #/gen/proposals (other teams' GameModels proposals: try + vote).
+// A GameModels draft (npc / building / monster) has no rebalance report: the 8B's review verdict (good / needs work +
+// suggestions; after its test game, or "Ask the 8B for a review") is shown on the draft and in the publish confirm.
 // Nothing here touches `document` at import time.
 
 const KINDS = ['effect', 'skill', 'class', 'npc', 'building', 'monster'];
@@ -18,6 +20,8 @@ export const GEN_CSS = `
 .gen-status{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.45;
   padding:8px 10px;border-radius:6px;background:var(--code-bg,rgba(127,127,127,.08));white-space:pre-wrap;word-break:break-word}
 .gen-status:empty{display:none}
+.gen-review{display:flex;flex-direction:column;gap:6px}.gen-review ul{margin:0;padding-left:20px}
+.gen-verdict{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:700;font-size:.85em}.gen-verdict.v-good{background:rgba(46,160,67,.25)}.gen-verdict.v-needs_work{background:rgba(211,158,0,.3)}.gen-verdict.v-none{background:rgba(127,127,127,.18)}
 .gen-state{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:700;font-size:.85em;background:rgba(127,127,127,.18)}
 .gen-state.s-ok{background:rgba(46,160,67,.22)}.gen-state.s-bad{background:rgba(217,83,79,.25)}.gen-state.s-run{background:rgba(61,123,224,.25)}
 .gen-custom{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.78em;font-weight:700;letter-spacing:.03em;
@@ -722,6 +726,9 @@ async function routeDraft(rest) {
   const bRetry = h('button', { class: 'au-btn', type: 'button' }, 'Retry…');
   const bPub = h('button', { class: 'au-btn au-primary', type: 'button' }, 'Publish the preview');
   const bDel = h('button', { class: 'au-btn', type: 'button' }, 'Delete');
+  // GameModels (no rebalance check): the 8B's review verdict of the definition shown, before publishing (user 2026-11-28)
+  const reviewBox = h('div', { class: 'au-box gen-review', hidden: !isGm(d.kind) });
+  const bReview = h('button', { class: 'au-btn', type: 'button', title: 'The 8B reads the definition (and its last test) and says whether it is good to publish' }, 'Ask the 8B for a review');
   const pubHint = h('div', { class: 'au-hint', hidden: true });
   const extra = h('textarea', { class: 'au-prose', rows: 3, maxlength: 1000, placeholder: 'What should change? (added to the description)' });
   const sugg = h('div', { class: 'gen-sugg' });
@@ -737,7 +744,7 @@ async function routeDraft(rest) {
     if (isGm(d.kind)) gmBox.replaceChildren(d.def ? gmCard(d) : h('div', { class: 'au-hint' }, RUNNING.includes(d.state) ? 'The model is writing it…' : 'No definition yet.'));
     stateEl.replaceChildren(statePill(d.state));
     idea.replaceChildren(`"${d.idea}"${(d.extras || []).length ? ` + ${d.extras.length} change(s)` : ''}`);
-    status.textContent = RUNNING.includes(d.state) ? (d.status || '…') : '';
+    status.textContent = RUNNING.includes(d.state) || d.reviewing ? (d.status || '…') : '';
     const failed = /^testing failed \d+$/.test(d.state);
     bShow.disabled = !d.def;
     const missed = d.tag_problems || [];
@@ -760,7 +767,23 @@ async function routeDraft(rest) {
     pubHint.hidden = !(d.state === 'testing success' && pub.ready === false);
     pubHint.textContent = `Publishing is not ready on this node${pub.why ? `: ${pub.why}` : ''} — the commit stays pending until it is (retry it under "My team's definitions").`;
     bPub.title = d.state === 'testing success' ? '' : 'Only after "testing success"';
-    bDel.disabled = RUNNING.includes(d.state);
+    bDel.disabled = RUNNING.includes(d.state) || !!d.reviewing;
+    if (isGm(d.kind)) {
+      const rv = d.review || null;
+      bReview.disabled = !d.def || RUNNING.includes(d.state) || !!d.reviewing;
+      reviewBox.replaceChildren(...[
+        h('div', { class: 'au-bar' }, h('b', null, '8B review'),
+          d.reviewing ? h('span', { class: 'gen-verdict v-none' }, 'asking the 8B…')
+            : rv?.verdict ? h('span', { class: `gen-verdict v-${rv.verdict}` }, rv.verdict === 'good' ? 'good — ready to publish' : 'needs work')
+            : h('span', { class: 'gen-verdict v-none' }, rv?.error ? 'no verdict' : 'not reviewed yet'),
+          rv?.model ? h('span', { class: 'au-hint' }, `${rv.model}${rv.where ? ` · ${rv.where === 'oci' ? 'on OCI' : 'this node'}` : ''} · ${String(rv.at || '').slice(0, 16).replace('T', ' ')}${rv.from === 'test' ? ' · after the test game' : ''}`) : null,
+          h('span', { class: 'au-grow' }), bReview),
+        rv?.summary ? h('div', null, rv.summary) : null,
+        rv?.error ? h('div', { class: 'au-hint' }, `The 8B gave no verdict: ${rv.error}`) : null,
+        rv?.verdict && (rv.suggestions || []).length ? h('ul', null, ...rv.suggestions.map(x => h('li', null, x))) : null,
+        h('div', { class: 'au-hint' }, 'GameModels have no rebalance check: the GameModels check, this verdict and the players\' votes are the gate. Suggestions can be picked under Retry…'),
+      ].filter(Boolean));
+    }
     const t = d.test;
     testBox.hidden = !t;
     if (t) {
@@ -782,7 +805,7 @@ async function routeDraft(rest) {
     }));
     if ((d.suggestions || []).length) sugg.prepend(h('div', { class: 'au-hint' }, 'Suggestions from the test review — click to include:'));
     if (d.published) testBox.append(h('div', { class: 'au-bar' }, h('b', null, 'Published'), h('span', { class: 'au-mono' }, `${d.published.branch || ''} @${String(d.published.commit || '').slice(0, 8)}`),
-      h('span', { class: 'au-hint' }, isGm(d.kind) ? 'on your team\'s branch of chaosD6-GameModels — it enters the game when the vote merges it' : d.kind === 'class' ? 'a class: no archive card (its ref is kept on this draft)' : `${d.published.granted ?? 0} team character(s) got the card (archive, new)`)));
+      h('span', { class: 'au-hint' }, isGm(d.kind) ? 'on your team\'s branch of chaosD6-GameModels — it enters the game when the vote merges it (its votes and "Publish to main": My team\'s definitions)' : d.kind === 'class' ? 'a class: no archive card (its ref is kept on this draft)' : `${d.published.granted ?? 0} team character(s) got the card (archive, new)`)));
     logBox.textContent = (d.log || []).join('\n');
   };
   const reload = async () => { try { d = (await genApi(`drafts/${encodeURIComponent(id)}`)).draft; render(); } catch (e) { if (e.status === 404) stop(); } };
@@ -790,11 +813,12 @@ async function routeDraft(rest) {
   const stop = () => { if (timer) clearInterval(timer); timer = null; };
   const startPoll = () => {
     stop();
-    timer = setInterval(() => { if (!root.isConnected) { stop(); return; } if (RUNNING.includes(d.state)) reload(); }, POLL_MS);
+    timer = setInterval(() => { if (!root.isConnected) { stop(); return; } if (RUNNING.includes(d.state) || d.reviewing) reload(); }, POLL_MS);
   };
   const post = async (route, body, ok) => { const r = await genApi(route, { method: 'POST', body: { draft_id: id, ...body } }); if (r?.draft) d = r.draft; render(); if (ok) C.toast(ok, 'ok'); setTimeout(reload, 2000); return r; };   // the first status line, then every 10 s
 
   bShow.addEventListener('click', () => previewSheet(d));
+  bReview.addEventListener('click', () => act(bReview, async () => { await post('review', {}, 'Asking the 8B for its review'); startPoll(); }));
   bTest.addEventListener('click', () => act(bTest, () => post('test', {}, 'Test game started (private, ~4 min)')));
   bRetry.addEventListener('click', () => {
     retryBox.hidden = !retryBox.hidden;
@@ -812,10 +836,12 @@ async function routeDraft(rest) {
   bPub.addEventListener('click', () => act(bPub, async () => {
     const team = C.session?.team?.name || 'your team';
     const gmFiles = isGm(d.kind) ? [d.def?.npc || d.def?.building || d.def?.monster, ...(d.def?.quests || []), d.def?.touches?.village, d.def?.touches?.race].filter(Boolean).map(x => x.id).join(', ') : '';
+    const rv = d.review || null;
+    const verdictText = !isGm(d.kind) ? '' : rv?.verdict === 'good' ? ' The 8B rates it good.' : rv?.verdict === 'needs_work' ? ` The 8B says it NEEDS WORK${rv.suggestions?.length ? ` (${rv.suggestions.slice(0, 2).join('; ')})` : ''} — you may still publish it; the players' votes decide.` : ' The 8B has NOT reviewed it (no verdict) — use "Ask the 8B for a review" first, or press OK to publish without it.';
     if (!(await C.confirm('Publish the preview?', isGm(d.kind)
-      ? `"${d.def?.name}" goes on ${team}'s branch of chaosD6-GameModels (one commit: ${gmFiles}), open to the players' votes. It enters the game when the vote merges it into main.`
+      ? `"${d.def?.name}" goes on ${team}'s branch of chaosD6-GameModels (one commit: ${gmFiles}), open to the players' votes. It enters the game when the vote merges it into main.${verdictText}`
       : `"${d.def?.name}" goes on ${team}'s branch of chaosD6-${{ skill: 'Skills', class: 'Classes' }[d.kind] || 'Effects'}, marked custom, open to the players' votes${d.kind === 'class' ? ' (a class is not a card: no archive card is given)' : `, and every ${team} character gets the card in its archive`}.`))) return;
-    const r = await post('publish', {});
+    const r = await post('publish', isGm(d.kind) && !d.review?.verdict ? { without_review: true } : {});
     if (r) C.toast(`Published on ${r.ref?.branch || 'the team branch'} — ${r.publish?.state || '?'}${d.kind === 'class' || isGm(d.kind) ? '' : `; ${r.granted?.length || 0} character(s) got the card`}`, r.publish?.state === 'published' ? 'ok' : 'info');
   }));
   bDel.addEventListener('click', () => act(bDel, async () => {
@@ -832,8 +858,9 @@ async function routeDraft(rest) {
     gmBox,
     status,
     h('div', { class: 'au-bar gen-bar' }, bShow, bTest, bRetry, bPub, h('span', { class: 'au-grow' }), bDel), pubHint,
-    retryBox, testBox,
-    h('details', { open: true }, h('summary', null, 'Validator report (the rebalance script)'), reportBox),
+    retryBox, testBox, reviewBox,
+    isGm(d.kind) ? h('div', { class: 'au-hint' }, 'No rebalance script for GameModels (the GameModels check runs on every preview; its problems are listed under Show preview).')
+      : h('details', { open: true }, h('summary', null, 'Validator report (the rebalance script)'), reportBox),
     h('details', null, h('summary', null, 'Conversation (your description, retries, the model, the validator, the tests)'), talkBox),
     h('details', null, h('summary', null, 'Job log'), logBox),
     h('div', { class: 'au-bar' }, h('button', { class: 'au-btn', type: 'button', onclick: () => C.navigate('#/gen/') }, 'All drafts')),

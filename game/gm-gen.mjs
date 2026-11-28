@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { generateDef } from './effect-gen.mjs';
+import { generateDef, complete } from './effect-gen.mjs';
 import { LogicEngine } from './logic-engine.mjs';
 import { GAMEMODELS_DIR, KINDS, ROLES, BUILDING_ROLES, STATS, REWARDS, TALK_RESERVED, loadGameModels, checkGameModels, knownIds } from './gamemodels.mjs';
 
@@ -663,5 +663,63 @@ export function gmSpec(kind, { dir = GAMEMODELS_DIR, pick = null } = {}) {
 export function generateGameModel({ kind, pick = null, dir = GAMEMODELS_DIR, ...o }) {
   if (!dir) return Promise.resolve({ ok: false, error: 'no chaosD6-GameModels checkout on this node', tries: [] });
   return generateDef(gmSpec(kind, { dir, pick }), o);
+}
+// ---- the 8B review (user 2026-11-28: "8B still should inform you if this new GameModels item is good") -------------
+// GameModels have no rebalance check (unlike effects, skills and classes): the GameModels check (structure, the monster
+// card rules), the 8B's verdict and the players' votes are their gate. The review is asked of the editor's big model —
+// genConfig (effect-gen.mjs): the desktop's own Qwen3-8B (llama-server), else the OCI 8B over HTTPS; never the nostr bus.
+// → { verdict: 'good' | 'needs_work', summary, suggestions[], model, where: 'local' | 'oci', at } | { error }
+export const REVIEW_VERDICTS = Object.freeze(['good', 'needs_work']);
+const REVIEW_ROLE = {
+  monster: 'You review a new wild monster of chaosD6 (a hex card game set in Warlords Battlecry 3: a monster lurks on its hex, wakes when a hero comes near and fights with its creature card — four stats, actions per round, an innate effect cast on Posture and a deck of 4 effects). The player wants it vivid and fair. Read the definition and the log lines of its test fight, say in one or two sentences how it played, and give at most 5 short, concrete suggestions (each one change: its temper text, name, a stat, a deck effect, its innate effect or rider, its agenda) that would make it more fun or more distinct.',
+  npc: 'You review a new villager of chaosD6 (a hex card game with villages of fantasy races). The player wants it to be vivid and descriptive: a clear voice, dialog that fits its race and role, stories with places and names, quests with a reason. Read the definition and the conversation a hero had with it in a test game, say in one or two sentences how it came across, and give at most 5 short, concrete suggestions (each one change: a line, a question and its answer, a story, a quest and its reward) that would make it more alive or more fun. Never suggest changing game rules.',
+  building: 'You review a new village building of chaosD6 (a hex card game with villages of fantasy races). Read the definition, say in one or two sentences how it fits its village and race, and give at most 5 short, concrete suggestions (each one change: its name, its text, its role, what it banks or produces) that would make it more descriptive or more fun.',
+};
+const REVIEW_TAIL = ' GameModels have no balance script: your verdict and the players\' votes decide whether it reaches the game. Give a verdict: "good" when it is ready to publish (vivid, fits its race and place, and it worked in the test), "needs_work" when something should change first (then the suggestions say what). Answer JSON {"verdict": "good" | "needs_work", "summary": "...", "suggestions": ["..."]}. /no_think';
+export const reviewSchema = () => ({ type: 'object', properties: { verdict: { type: 'string', enum: [...REVIEW_VERDICTS] }, summary: { type: 'string' }, suggestions: { type: 'array', items: { type: 'string' }, maxItems: 5 } }, required: ['verdict', 'summary', 'suggestions'] });
+const kindOfBundle = (b) => (b?.npc ? 'npc' : b?.building ? 'building' : b?.monster ? 'monster' : null);
+/** The messages of the 8B review of a bundle. test = gm-gen-test's result / a draft's test (or null: not tested yet). */
+export function reviewMessages(b, test = null, { check = null } = {}) {
+  const kind = kindOfBundle(b);
+  const D = b.npc || b.building || b.monster;
+  const def = kind === 'monster'
+    ? { monster: { id: D.id, name: D.name, race: D.race, temper: D.temper, agenda: D.agenda?.uses, tags: D.card?.tags, data: D.card?.data } }
+    : kind === 'npc'
+    ? { npc: { id: D.id, name: D.name, race: D.race, role: D.role, persona: D.persona, lines: D.lines, talk: D.talk }, quests: (b.quests || []).map(q => ({ name: q.name, need_text: q.need_text, rewards: q.rewards })), place: b.place }
+    : { building: { id: D.id, name: D.name, race: D.race, role: D.role, bank: D.bank, produces: D.produces, text: D.text }, place: b.place };
+  const name = String(D.name || D.id);
+  const t = test || null;
+  const result = !t ? 'not tested in a game yet'
+    : `${t.pass ? 'passed' : `failed — ${(t.why || []).join('; ')}`}; ${kind === 'monster' ? `chases ${t.chases ?? 0}, casts ${t.casts ?? 0}, hits ${t.hits ?? 0}, kills ${t.kills ?? 0}${t.monster_died || t.monsterDied ? ', it died' : ''}`
+      : kind === 'npc' ? `${t.spawned ? 'spawned' : 'never spawned'}, answered ${t.talks ?? 0} question(s), ${t.agenda ?? 0} agenda step(s), ${t.quests ?? 0} quest(s) handed in` : `village ${t.village ? 'found' : 'not found'}`}; errors ${t.errors ?? 0}, divergences ${t.divergences ?? 0}`;
+  const power = check?.power != null ? `\nCreature power score ${check.power}${check.base_power != null ? ` (the card it changes: ${check.base_power})` : check.range ? ` (existing monsters: ${check.range[0]}–${check.range[1]})` : ''} — information only.` : '';
+  const lines = (t?.lines || []).slice(0, 30).join('\n');
+  const talk = (t?.talk || []).map(c => `Hero: ${c.ask}\n${name}: ${c.answer}`).join('\n');
+  const errs = t?.error_lines || t?.errorLines || [];
+  return [
+    { role: 'system', content: REVIEW_ROLE[kind] + REVIEW_TAIL },
+    { role: 'user', content: `Definition:\n${JSON.stringify(def)}\n\nTest: ${result}.${power}\n\n${kind === 'monster' ? `Fight log:\n${lines || '(none)'}\n` : ''}${kind === 'npc' ? `Conversation:\n${talk || '(none — the hero never talked with it)'}\n` : ''}${errs.length ? `\nErrors:\n${errs.join('\n')}` : ''}\n/no_think` },
+  ];
+}
+/** A model answer (text) → the review, or { error }. */
+export function parseReview(text) {
+  try {
+    const s = String(text || '');
+    const j = JSON.parse(s.slice(s.indexOf('{'), s.lastIndexOf('}') + 1));
+    const raw = String(j.verdict || '').toLowerCase();
+    const verdict = REVIEW_VERDICTS.includes(raw) ? raw : /^(good|ready|fine|ok)\b/.test(raw) ? 'good' : raw ? 'needs_work' : null;
+    if (!verdict) return { error: 'the review has no verdict' };
+    return { verdict, summary: String(j.summary || '').slice(0, 600), suggestions: (Array.isArray(j.suggestions) ? j.suggestions : []).map(x => String(x).slice(0, 300)).filter(Boolean).slice(0, 5) };
+  } catch { return { error: 'the review is not JSON' }; }
+}
+/** The 8B's review of a bundle (cfg = genConfig of the editor's llm.json). completeImpl: tests. */
+export async function reviewGameModel(b, { test = null, check = null, cfg, completeImpl = complete } = {}) {
+  if (!kindOfBundle(b)) return { error: 'not a GameModels draft' };
+  if (!cfg?.url) return { error: 'no big model configured (the 8B: the desktop llama-server or the OCI key)' };
+  const r = await completeImpl(cfg, reviewMessages(b, test, { check }), { schema: reviewSchema(), maxTokens: 700, temperature: 0.3 });
+  if (r.error) return { error: r.error };
+  const v = parseReview(r.text);
+  if (v.error) return v;
+  return { ...v, model: cfg.model || null, where: cfg.fell_back_from || !/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(cfg.url) ? 'oci' : 'local', at: new Date().toISOString() };
 }
 export { HERE as GM_GEN_HERE };

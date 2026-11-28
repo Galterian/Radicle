@@ -11,7 +11,10 @@
 //   defs/<kind>/<id>.json         game/skills-data/skills, effects-data/effects, classes-data/classes
 // API under /rules/api/editor/ (JSON in / out; errors 4xx { ok:false, error }):
 //   GET session · POST login · GET templates?kind= · POST validate · POST definitions · GET definitions/mine ·
-//   POST definitions/retry · POST proposals   (contract: game/tools/out/EDITOR_SPEC.md "Node API")
+//   POST definitions/retry · POST definitions/main · POST proposals   (contract: game/tools/out/EDITOR_SPEC.md "Node API")
+// definitions/mine carries each version's vote collection (votes: n, share, needs_rework, publishable, top_tags); POST
+// definitions/main { kind, id, dry } = "Publish to main" of a publishable version (editor-publish.mjs publishToMain: a
+// delegate merges through the repo pipeline, anyone else opens a Radicle patch; dry = the checks only).
 // Security (same-origin only, no CORS headers ever): every API request needs Host 127.0.0.1:<port> | localhost:<port>
 // (DNS-rebinding guard); a POST also needs X-Editor-Token (random per process, handed out by GET session only),
 // Content-Type application/json, a body ≤ 512 KB, and — when sent — Origin = the server's own origin and
@@ -29,7 +32,7 @@ import { ID_RE } from './defs-repo.mjs';
 import { loadProfile, profilePath } from './profile.mjs';
 import { teamSlug, ownerIds } from './profile-auth.mjs';
 import { voterIdentity } from './proposal-votes.mjs';
-import { publishDefinition, retryDefinition, listMine, publishReadiness, KINDS } from './editor-publish.mjs';
+import { publishDefinition, retryDefinition, listMineWithVotes, publishToMain, publishReadiness, KINDS } from './editor-publish.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const BODY_MAX = 512 * 1024;
@@ -312,15 +315,23 @@ async function handleApi(req, res, url, sub, ctx) {
     }
     case 'GET definitions/mine': {
       const s = sessionOf(ctx);
-      return sendJson(res, 200, { ok: true, team: s.team, definitions: s.team ? listMine(s.team.slug, ctx.publish || {}) : [] });
+      return sendJson(res, 200, { ok: true, team: s.team, definitions: s.team ? await listMineWithVotes(s.team.slug, ctx.publish || {}) : [] });
     }
     case 'POST definitions/retry': {
       const s = requireLogin(ctx);
       const b = await readJsonBody(req);
-      const kind = kindOf(b.kind);
+      const kind = b.kind === 'gamemodels' ? 'gamemodels' : kindOf(b.kind);   // a GameModels bundle of #/mine too
       if (typeof b.id !== 'string' || !ID_RE.test(b.id)) fail(400, 'id required');
       const r = await retryDefinition({ kind, id: b.id, identity: s.identity, team: s.team }, ctx.publish || {});
       return sendJson(res, r.ok ? 200 : 404, r);
+    }
+    case 'POST definitions/main': {
+      const s = requireLogin(ctx);
+      const b = await readJsonBody(req);
+      const kind = b.kind === 'gamemodels' ? 'gamemodels' : kindOf(b.kind);
+      if (typeof b.id !== 'string' || !ID_RE.test(b.id)) fail(400, 'id required');
+      const r = await publishToMain({ kind, id: b.id, identity: s.identity, team: s.team, dry: b.dry === true }, ctx.publish || {});
+      return sendJson(res, r.ok ? 200 : 409, r);
     }
     case 'POST proposals': {
       const s = requireLogin(ctx);

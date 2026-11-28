@@ -306,7 +306,7 @@ export function gateSkills(reveals, missing, statusOf, refsByActor, isBuiltin) {
 
 // ------------------------------------------------------------------ the peer adapter (peer.mjs glue)
 const envMs = (name, dflt) => { const v = Number(process.env[name]); return Number.isFinite(v) && v >= 0 ? v : dflt; };
-export async function createSkPeer({ selfId, label = selfId, dimId, ui = () => {}, log: logIn = null, nameOf = () => null, engine: engineIn, validate: validateIn, onReady = null } = {}) {
+export async function createSkPeer({ selfId, label = selfId, dimId, ui = () => {}, log: logIn = null, nameOf = () => null, engine: engineIn, validate: validateIn, onReady = null, onLearned: learnedOut = null } = {}) {
   const log = logIn || ((line) => console.log(`[${label}] sk: ${line}`));
   const bundled = bundledSkillSet();
   const engine = engineIn !== undefined ? engineIn : skillsEngine();
@@ -336,7 +336,7 @@ export async function createSkPeer({ selfId, label = selfId, dimId, ui = () => {
   const sync = createSkSync({
     selfId, store, cache, fallbackFetchers, log, opts: process.env.SK_PREFETCH === '0' ? { prefetch: false } : {},   // FXG: SK_PREFETCH=0 (tests) — no sk_have prefetch
     request: (peerId, msg) => (request ? request(peerId, msg) : Promise.reject(Object.assign(new Error('no transport yet'), { code: 'NO_ROUTE' }))),
-    onLearned: (p, src) => { active = true; log(`learned ${p.ref.id} (${prefixOf(p.ref.sha256)}, ${p.ref.branch || 'no branch'}, verdict ${p.verdict}) from ${src}`); notice('learned', p, src && src.startsWith('peer:') ? src : null); },
+    onLearned: (p, src) => { active = true; log(`learned ${p.ref.id} (${prefixOf(p.ref.sha256)}, ${p.ref.branch || 'no branch'}, verdict ${p.verdict}) from ${src}`); notice('learned', p, src && src.startsWith('peer:') ? src : null); try { learnedOut?.(p, src); } catch {} },
     onShared: (p, peer) => { log(`shared ${p.ref.id} (${prefixOf(p.ref.sha256)}) with ${peer}`); notice('shared', p, peer); },
   });
   let busRpc = null;

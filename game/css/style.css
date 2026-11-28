@@ -261,7 +261,8 @@ main {
 .slot.disabled { opacity: 0.35; filter: grayscale(0.8); cursor: not-allowed; }
 .slot.disabled:hover { transform: none; border-color: #26303f; }
 /* User ruling 2026-11-22: a player card whose test votes are too low (review flag: 10+ votes, mean ≤ −3) is GREY
-   wherever it shows — hand, archive, class pill, skill cards, perms strip — but still playable (no cursor change). */
+   wherever it shows — hand, archive, class pill, skill cards, perms strip. User 2026-11-28: it NEEDS REWORK — the peer
+   leaves it out of the next deck it builds (peer.mjs reworkOf); a card flagged during a game only turns grey here. */
 .slot:has(.fx-src-low), .ac:has(.fx-src-low), .pill:has(.fx-src-low), .skill-card:has(.fx-src-low), .perm.voted-low { filter: grayscale(1); opacity: 0.55; }
 .slot.discard { opacity: 0.4; filter: grayscale(0.6); }
 .slot.discard::after {

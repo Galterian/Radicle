@@ -1007,10 +1007,12 @@ async function openCharacterEditor(mode, charId) {
   // Class
   const classText = h('div', { class: 'pe-class-text' });
   // custom: a class the team published (profile.custom_classes, user 2026-11-23) — ✪, the server sets its ref
-  const showClass = () => { const k = classes.get(c.class_id); classText.textContent = k ? `${k.custom ? '✪ custom class — ' : ''}${k.text || '—'}` : `unknown class ${c.class_id}`; };
+  // met: a player's class I met in a game (profile.met_classes, user 2026-11-28) — ◈, for a new character only
+  const mark = (k) => (k?.custom ? '✪ ' : k?.met ? '◈ ' : '');
+  const showClass = () => { const k = classes.get(c.class_id); classText.textContent = k ? `${k.custom ? '✪ custom class — ' : k.met ? `◈ met in a game${k.from ? ` (${k.from})` : ''}, a player's proposal on test — ` : ''}${k.text || '—'}` : `unknown class ${c.class_id}`; };
   const classCtl = create
-    ? sel([...classes.values()].map(k => ({ value: k.id, text: `${k.custom ? '✪ ' : ''}${k.name}` })), c.class_id, { class: 'pe-select', onchange: (ev) => { c.class_id = ev.target.value; showClass(); voiceAt = 0; showUnit(); refresh(); } })
-    : h('div', { class: 'pe-fixed', text: `${classes.get(c.class_id)?.custom ? '✪ ' : ''}${classes.get(c.class_id)?.name || prettyId(c.class_id)}` });
+    ? sel([...classes.values()].map(k => ({ value: k.id, text: `${mark(k)}${k.name}` })), c.class_id, { class: 'pe-select', onchange: (ev) => { c.class_id = ev.target.value; showClass(); voiceAt = 0; showUnit(); refresh(); } })
+    : h('div', { class: 'pe-fixed', text: `${mark(classes.get(c.class_id))}${classes.get(c.class_id)?.name || prettyId(c.class_id)}` });
   showClass();
   left.append(section(['Class ', !create && lockTag()], classCtl, classText));
 

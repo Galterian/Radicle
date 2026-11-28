@@ -333,6 +333,76 @@ ok(UI.handleSlug('Ána Ström') === V.handleSlug('Ána Ström') && V.handleSlug(
   ok(V.normalizeTarget({ ...ref, sha256: undefined, commit: 'd'.repeat(40) }).key !== V.normalizeTarget({ ...ref, sha256: undefined }).key, 'commit-only refs: new commit = new key');
 }
 
+// ==== rulings 6–8 (2026-11-28): tags, needs rework, publishable ===============================================
+{
+  // tags: normalisation, unknown dropped, every kind
+  ok(JSON.stringify(V.normalizeTags([' Weak ', 'OVERPOWERED', 'weak', 'nonsense', '', null, 'fun'])) === '["fun","overpowered","weak"]', 'normalizeTags: trim, lower, dedupe, sort, unknown dropped');
+  ok(V.normalizeTags('weak').length === 0 && V.normalizeTags(undefined).length === 0, 'normalizeTags: non-array → []');
+  ok(V.TAGS.every(t => typeof V.TAG_LABELS[t] === 'string') && Object.keys(V.TAG_LABELS).length === V.TAGS.length, 'every tag has a label');
+  const tv = V.validateVote(base({ value: -2, comment: 'too strong', tags: ['overpowered', 'bogus', 'Too_Simple'] }));
+  ok(JSON.stringify(tv.tags) === '["overpowered","too_simple"]', `validateVote keeps known tags only ${JSON.stringify(tv.tags)}`);
+  ok(!('tags' in V.validateVote(base({ tags: ['bogus'] }))) && !('tags' in V.validateVote(base())), 'no (known) tags → no tags field');
+  for (const r0 of [{ id: 'skill_dodge', branch: 'players/zed/quick-dodge', sha256: SHA2 }, { id: 'class_seer', branch: 'players/zed/seer', commit: COMMIT }, { id: 'npc_old_miller', branch: 'players/zed/miller', commit: COMMIT }])
+    ok(V.validateVote({ ...r0, voter: A, value: 1, comment: '', at: '2026-11-28T10:00:00.000Z', tags: ['fun'] }).tags?.[0] === 'fun', `tags on a ${r0.id.split('_')[0]} vote`);
+  // tags are signed: round trip + tamper
+  const ts = V.signVote(id1.privateKeyPem, base({ value: 2, tags: ['weak', 'fun'] }));
+  ok(V.verifyVote(ts) && JSON.stringify(V.parseVote(V.serializeVote(ts)).tags) === '["fun","weak"]', 'tags survive sign → serialize → parse, signature verifies');
+  ok(V.serializeVote(ts).includes('"tags":["fun","weak"]'), 'tags are in the signed bytes');
+  ok(!V.verifyVote({ ...ts, tags: ['weak'] }) && !V.verifyVote({ ...ts, tags: ['weak', 'fun', 'buggy'] }), 'tampered tags fail the signature');
+  ok(V.verifyVote({ ...ts, tags: ['WEAK', 'fun', 'bogus'] }), 'tags are normalised before verifying (order / case / unknown)');
+  // aggregate tag counts
+  const tagged = [base({ voter: 'peer:t0', value: -2, comment: 'x', tags: ['overpowered', 'too_simple'] }), base({ voter: 'peer:t1', value: -1, comment: 'x', tags: ['overpowered'] }),
+    base({ voter: 'peer:t2', value: 3, tags: ['fun', 'overpowered'] }), base({ voter: 'peer:t3', value: 0 })];
+  const ta = V.aggregate(tagged, key);
+  ok(JSON.stringify(ta.tags) === JSON.stringify({ overpowered: 3, too_simple: 1, fun: 1 }) || (ta.tags.overpowered === 3 && ta.tags.too_simple === 1 && ta.tags.fun === 1 && Object.keys(ta.tags).length === 3), `aggregate tag counts ${JSON.stringify(ta.tags)}`);
+  ok(ta.positive === 1 && JSON.stringify(V.aggregate([], key).tags) === '{}', 'aggregate positive count + empty tags');
+  // WS: tags saved + shown back as mine
+  const d6 = fs.mkdtempSync(path.join(os.tmpdir(), 'chaosd6-pv-tags-')), pf6 = path.join(d6, 'profile.json');
+  fs.writeFileSync(pf6, '{"version":1,"characters":[]}');
+  const r6 = V.pvHandle({ kind: 'proposal_vote', ref, value: -3, comment: 'too strong', tags: ['overpowered', 'xyz'] }, { profileFile: pf6, peerId: 'p6' });
+  ok(r6.ok && JSON.stringify(r6.mine[key]?.tags) === '["overpowered"]', `WS: tags saved ${JSON.stringify(r6.mine?.[key])}`);
+  const h6 = V.pvHello({ profileFile: pf6 });
+  ok(JSON.stringify(h6.mine[key].tags) === '["overpowered"]' && h6.tags.length === V.TAGS.length && h6.tags.every(t => t.label === V.TAG_LABELS[t.id]), 'hello: my tags + the tag list with labels');
+  ok(h6.limits.publish_min_votes === V.PUBLISH_MIN_VOTES && h6.limits.publish_positive_share === V.PUBLISH_POSITIVE_SHARE, 'hello: publish limits');
+  fs.rmSync(d6, { recursive: true, force: true });
+
+  // publishable: n ≥ 10 and > 60 % positive; never while it needs rework
+  const mix = (pos, rest, restVal = 0) => [...Array.from({ length: pos }, (_, i) => base({ voter: `peer:p${i}`, value: 4 })),
+    ...Array.from({ length: rest }, (_, i) => base({ voter: `peer:r${i}`, value: restVal, comment: restVal < 0 ? 'meh' : '' }))];
+  ok(!V.aggregate(mix(9, 0), key).publishable, '9 votes, all positive: not publishable');
+  ok(V.aggregate(mix(7, 3), key).publishable, '10 votes, 7 positive: publishable');
+  ok(!V.aggregate(mix(6, 4), key).publishable, '10 votes, 6 positive (exactly 60 %): not publishable');
+  ok(!V.aggregate(mix(6, 4, -1), key).publishable && !V.aggregate(mix(0, 10, 0), key).publishable, '0 is not positive');
+  ok(V.publishableFlag({ n: 10, mean: 2, positive: 7 }) && !V.publishableFlag({ n: 10, mean: -3, positive: 7 }), 'review (needs rework) blocks publishable');
+  const rw = V.aggregate(mix(7, 3, -6), key);   // 7×+4, 3×−6 → mean +1: publishable, no rework
+  ok(rw.publishable && !rw.review, `7×+4 3×−6: publishable ${JSON.stringify({ n: rw.n, mean: rw.mean })}`);
+  ok(!V.publishableFlag(null) && !V.publishableFlag({ n: 10, mean: 1 }), 'publishable needs a positive count');
+  // needsRework = review
+  ok(V.needsRework({ n: 10, mean: -3 }) && !V.needsRework({ n: 9, mean: -6 }) && !V.needsRework({ n: 10, mean: -2.9 }), 'needsRework: n ≥ 10 and mean ≤ −3');
+  ok(V.needsRework === V.reviewFlag, 'needsRework is the review flag');
+  const vw = V.verdictWithVotes('ok', V.aggregate(mix(8, 2), key));
+  ok(vw.publishable === true && vw.review === false && vw.verdict === 'ok', 'verdictWithVotes carries publishable');
+  // collections for the HUD (+ cached flags re-derived)
+  const d7 = fs.mkdtempSync(path.join(os.tmpdir(), 'chaosd6-pv-col-')), pf7 = path.join(d7, 'profile.json');
+  V.saveCollections([...mix(8, 2), ...tagged.map(v => ({ ...v, voter: v.voter + 'x' }))].map((v, i) => ({ ...v, tags: i < 3 ? ['fun'] : v.tags })), V.collectedFile(pf7));
+  const ui7 = V.collectionsForUI(pf7)[key];
+  ok(ui7 && ui7.n === 14 && ui7.positive === 9 && ui7.publishable === true && ui7.tags.fun >= 3 && ui7.tags.overpowered === 3, `collectionsForUI: n, positive, publishable, tags ${JSON.stringify(ui7)}`);
+  fs.writeFileSync(V.collectedFile(pf7), JSON.stringify({ version: 1, collections: { [key]: { n: 4, mean: 5, positive: 4, publishable: true } } }));
+  ok(V.collectionOf(ref, pf7).publishable === false && V.collectionsForUI(pf7)[key].publishable === false, 'a cached publishable flag is re-derived (n 4 → no)');
+  fs.rmSync(d7, { recursive: true, force: true });
+
+  // HUD mirrors
+  ok(JSON.stringify(UI.TAGS) === JSON.stringify(V.TAGS) && JSON.stringify(UI.TAG_LABELS) === JSON.stringify(V.TAG_LABELS), 'HUD tag list mirrors the peer');
+  ok(UI.PUBLISH_MIN_VOTES === V.PUBLISH_MIN_VOTES && UI.PUBLISH_POSITIVE_SHARE === V.PUBLISH_POSITIVE_SHARE, 'HUD publish limits mirror the peer');
+  for (const c of [{ n: 9, mean: 3, positive: 9 }, { n: 10, mean: 2, positive: 7 }, { n: 10, mean: 1, positive: 6 }, { n: 10, mean: -3, positive: 7 }, { n: 12, mean: -4, positive: 0 }, null])
+    ok(UI.publishableFlag(c) === V.publishableFlag(c) && UI.needsRework(c) === V.needsRework(c), `HUD flags = peer flags for ${JSON.stringify(c)}`);
+  ok(JSON.stringify(UI.normalizeTags([' Weak', 'bogus', 'fun', 'weak'])) === JSON.stringify(V.normalizeTags([' Weak', 'bogus', 'fun', 'weak'])), 'HUD normalizeTags = peer');
+  ok(JSON.stringify(UI.topTags({ weak: 2, fun: 5, overpowered: 2, buggy: 1 })) === '[["fun",5],["overpowered",2],["weak",2]]', 'HUD topTags: top 3 by count, ties in tag order');
+  ok(/needs rework/.test(UI.REWORK_TEXT) && /not playable/.test(UI.REWORK_TEXT) && /publishable/.test(UI.PUBLISHABLE_TEXT), 'HUD flag texts');
+  ok(/NEEDS REWORK/.test(ES.sourceTitle({ ...ES.normalizeSource(ref), review: true })) && /not playable/.test(ES.sourceTitle({ ...ES.normalizeSource(ref), review: true })), 'source tooltip says needs rework / not playable');
+  ok(!/still playable/.test(fs.readFileSync(new URL('../js/effect_source.js', import.meta.url), 'utf8')), 'no "still playable" left in effect_source.js');
+}
+
 fs.rmSync(dir, { recursive: true, force: true });
 fs.rmSync(RAD_TMP, { recursive: true, force: true });
 console.log(fails ? `${fails} of ${n} proposal-votes check(s) FAILED` : `all proposal-votes checks passed (${n})`);

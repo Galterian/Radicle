@@ -32,6 +32,7 @@ import { playableEffects, EFFECT_RULES, builtinEffectCatalog } from './effects.m
 import { fancyLabel } from './js/names.js';
 import { readCollection } from './defs-collection.mjs';
 import { SKILLS_IMPLEMENTED, NEGATING_SKILLS, TRANCE, builtinSkillCatalog } from './skills.mjs';   // S1; skill isolation: + builtinSkillCatalog
+import { collectionOf } from './proposal-votes.mjs';   // a met / custom proposal whose votes say "needs rework" is not offered (2026-11-28)
 
 // S1: the skills the resolver plays, the negating ones and Battle Trance come from skills.mjs (SKILL_RULES).
 export const PROFILE_SKILLS = [...SKILLS_IMPLEMENTED];
@@ -128,11 +129,16 @@ export function loadCatalog(dataDir) {
 }
 // The catalogue as the UI needs it (small). `p` (the profile): its team's published custom classes join the class list
 // (user 2026-11-23: a new character may take one; custom: true + the ref the peer boots it from + its unit voice).
-export function catalogForUI(cat, p = null) {
+// Met classes (user 2026-11-28: "you will be able to create a character of those classes"): met: true, same shape.
+// `file` (the profile file) finds the players' vote collections: a class version that needs rework is left out.
+export const reworkOf = (kind, ref, file = '') => { try { const a = collectionOf({ ...ref, kind }, file); return a.review ? a : null; } catch { return null; } };
+export function catalogForUI(cat, p = null, { file = '' } = {}) {
+  const own = new Set(customClassesOf(p).map(x => x.id));
   return {
     limits: LIMITS,
     classes: [...Object.values(cat.classes).map(c => ({ id: c.id, name: c.name, text: c.data.text || '', kind: c.data.ability_kind || '', colors: c.data.colors || [] })),
-      ...customClassesOf(p).filter(x => !cat.classes[x.id]).map(x => ({ id: x.id, name: x.name, text: x.text, kind: x.kind, colors: x.colors, custom: true, ref: x.ref, voice: x.voice || [] }))],
+      ...customClassesOf(p).filter(x => !cat.classes[x.id]).map(x => ({ id: x.id, name: x.name, text: x.text, kind: x.kind, colors: x.colors, custom: true, ref: x.ref, voice: x.voice || [] })),
+      ...metClassesOf(p).filter(x => !cat.classes[x.id] && !own.has(x.id) && !reworkOf('class', x.ref, file)).map(x => ({ id: x.id, name: x.name, text: x.text, kind: '', colors: [], met: true, from: x.from || '', ref: x.ref, voice: [] }))],
     units: cat.units,
     // The flags the in-game hand shows (peer.mjs makeSkillCard / makeEffectCard + main.js card chips).
     skills: cat.skillIds.map(id => {
@@ -213,7 +219,7 @@ export function validateCharacter(c, cat) {
 // ---------------------------------------------------------------------------------------------
 // Profile edits (each returns the changed profile or throws Error with a player-readable message)
 const fail = (msg) => { const e = new Error(msg); e.status = 400; throw e; };
-export function createCharacter(p, draft, cat) {
+export function createCharacter(p, draft, cat, { file = '' } = {}) {
   const c = structuredClone(draft);
   c.id = c.id && !characterOf(p, c.id) ? c.id : `pc_${randomBytes(4).toString('hex')}`;
   c.name = String(c.name || '').trim().slice(0, 40);
@@ -222,8 +228,10 @@ export function createCharacter(p, draft, cat) {
   for (const x of c.cards || []) x.uid ||= uid();
   // a custom class: only one the team published (profile.custom_classes), with ITS ref (not the client's)
   if (!cat.classes[c.class_id]) {
-    const cc = customClassesOf(p).find(x => x.id === c.class_id);
-    if (!cc) fail(`unknown class ${c.class_id} (a custom class must be one your team published)`);
+    const cc = customClassesOf(p).find(x => x.id === c.class_id) || metClassesOf(p).find(x => x.id === c.class_id);   // + a class I met in a game
+    if (!cc) fail(`unknown class ${c.class_id} (a custom class must be one your team published or one you met in a game)`);
+    const rw = reworkOf('class', cc.ref, file);
+    if (rw) fail(`${cc.name || c.class_id} needs rework (${rw.n} test votes, mean ${rw.mean}): it can be taken again once its author updates it`);
     c.class_ref = structuredClone(cc.ref);
   } else delete c.class_ref;
   const err = validateCharacter(c, cat);
@@ -345,6 +353,89 @@ export function addCustomClass(file, def, ref) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Met proposals (user 2026-11-28: "just seeing it saves it" — effects, skills, classes and GameModels alike). A player who
+// meets a player-made definition in a game keeps it: an effect / skill as an archive card of the character who met it
+// (met: true, playable like a won card), a class or a GameModels entry in the team's met lists. One entry per proposal
+// BRANCH (the author keeps pushing to it; the latest seen version is what the entry carries), else per exact version.
+// Latest (user 2026-11-28): seeing ANOTHER version of a branch I hold moves the entry to it, unless it is one the
+// entry already moved on from (`seen`: the versions it carried before, newest last) — no flip-flop between two peers.
+const verOf = (r) => r?.sha256 || r?.commit || '';
+function moveToLatest(x, ref) {
+  const cur = verOf(x.ref), nv = verOf(ref);
+  if (!nv || nv === cur || (x.seen || []).includes(nv)) return false;
+  x.seen = [...(x.seen || []).filter(v => v !== cur), cur].filter(Boolean).slice(-20);
+  x.ref = ref;
+  return true;
+}
+const metKeyOf = (kind, id, ref) => `${kind}:${id}:${ref?.branch || ref?.sha256 || ref?.commit || ''}`;
+export function addMetCard(file, charId, card, from = '') {
+  return updateProfile(p => {
+    const c = characterOf(p, charId);
+    const ref = foreignRefOf(card);
+    if (!c || !['skill', 'effect'].includes(card?.kind) || !ref) return null;
+    const key = metKeyOf(card.kind, card.id, ref);
+    const held = c.cards.find(x => x.ref && metKeyOf(x.kind, x.id, x.ref) === key);   // already held (won, granted or met)
+    if (held) {
+      if (!ref.branch || !moveToLatest(held, ref)) return null;
+      held.source = { ...ref, kind: card.kind }; held.updated_at = new Date().toISOString(); held.new = true;
+      return { ...held, updated: true };
+    }
+    const x = { uid: uid(), kind: card.kind, id: card.id, where: 'archive', from: String(from).slice(0, 60), new: true, met: true, taken_at: new Date().toISOString(),
+      ref, source: { ...ref, kind: card.kind } };
+    c.cards.push(x);
+    return x;
+  }, file);
+}
+export function metClassesOf(p) {
+  return (Array.isArray(p?.met_classes) ? p.met_classes : []).filter(x => x && /^class_[a-z0-9_]+$/.test(String(x.id)) && foreignRefOf({ id: x.id, ref: x.ref }));
+}
+export function addMetClass(file, def, ref, from = '') {
+  return updateProfile(p => {
+    const r = foreignRefOf({ id: def?.id, ref });
+    if (!r || customClassesOf(p).some(y => y.id === def.id)) return null;   // my team's own class is in custom_classes
+    const key = metKeyOf('class', def.id, r);
+    const held = metClassesOf(p).find(y => metKeyOf('class', y.id, y.ref) === key);
+    if (held) {
+      if (!r.branch || !moveToLatest(held, r)) return null;
+      if (def.name) held.name = String(def.name).slice(0, 80);
+      if (def.data?.text) held.text = String(def.data.text).slice(0, 600);
+      held.at = new Date().toISOString();
+      p.met_classes = metClassesOf(p).map(y => (metKeyOf('class', y.id, y.ref) === key ? held : y));
+      return { ...held, updated: true };
+    }
+    const x = { id: def.id, name: String(def.name || def.id).slice(0, 80), text: String(def.data?.text || '').slice(0, 600), ref: r, from: String(from).slice(0, 60), at: new Date().toISOString() };
+    p.met_classes = [...metClassesOf(p), x];
+    return x;
+  }, file);
+}
+// A GameModels proposal entry (npc_ / mon_ / bld_ …) met in a game: its proposal ref (gm-proposals.mjs) — repo, branch,
+// commit, sha256 of the bundle, ns, author. What "using" it later means is the user's open question (2026-11-28).
+const GM_ID = /^(npc|mon|bld|qst|vil|race)_[a-z0-9_]+$/;
+export function metGameModelsOf(p) {
+  return (Array.isArray(p?.met_gamemodels) ? p.met_gamemodels : []).filter(x => x && GM_ID.test(String(x.id)) && x.ref && typeof x.ref === 'object');
+}
+export function addMetGameModel(file, entry, from = '') {
+  return updateProfile(p => {
+    const id = String(entry?.id || ''), r = entry?.ref;
+    if (!GM_ID.test(id) || !r || typeof r !== 'object' || !(r.branch || r.commit || r.sha256)) return null;
+    const ref = {};
+    for (const k of ['repo', 'branch', 'commit', 'sha256', 'ns', 'author', 'bundle']) if (typeof r[k] === 'string' && r[k]) ref[k] = r[k].slice(0, 200);
+    const key = metKeyOf('gm', id, ref);
+    const held = metGameModelsOf(p).find(y => metKeyOf('gm', y.id, y.ref) === key);
+    if (held) {
+      if (!ref.branch || !moveToLatest(held, ref)) return null;
+      if (entry.name) held.name = String(entry.name).slice(0, 80);
+      held.at = new Date().toISOString();
+      p.met_gamemodels = metGameModelsOf(p).map(y => (metKeyOf('gm', y.id, y.ref) === key ? held : y));
+      return { ...held, updated: true };
+    }
+    const x = { id, name: String(entry.name || id).slice(0, 80), ref, from: String(from).slice(0, 60), at: new Date().toISOString() };
+    p.met_gamemodels = [...metGameModelsOf(p), x];
+    return x;
+  }, file);
+}
+
+// ---------------------------------------------------------------------------------------------
 // What a peer process needs to play a profile character (spread into its env).
 export function profileEnv(file, c) {
   return { PROFILE_FILE: file, PROFILE_CHAR_ID: c.id, CHARACTER_ID: c.base_character, ENTITY_NAME: c.name, PROFILE_TEAM: c.team || '' };
@@ -378,9 +469,9 @@ export async function handleProfileApi(req, res, urlPath, { file = profilePath()
     const cat = loadCatalog(dataDir);
     const m = req.method;
     if (m === 'GET' && urlPath === '/api/profile') return send(200, { profile: loadProfile(file), limits: LIMITS, file }), true;
-    if (m === 'GET' && urlPath === '/api/profile/catalog') return send(200, catalogForUI(cat, loadProfile(file))), true;
+    if (m === 'GET' && urlPath === '/api/profile/catalog') return send(200, catalogForUI(cat, loadProfile(file), { file })), true;
     if (m === 'POST' && urlPath === '/api/profile/draft') return send(200, { character: newDraft(cat, loadProfile(file)) }), true;
-    if (m === 'POST' && urlPath === '/api/profile/characters') { const b = await readBody(req); return send(200, { profile: updateProfile(p => createCharacter(p, b.character, cat), file) }), true; }
+    if (m === 'POST' && urlPath === '/api/profile/characters') { const b = await readBody(req); return send(200, { profile: updateProfile(p => createCharacter(p, b.character, cat, { file }), file) }), true; }
     const cm = /^\/api\/profile\/characters\/([\w-]+)$/.exec(urlPath);
     if (m === 'PUT' && cm) { const b = await readBody(req); return send(200, { profile: updateProfile(p => editDeck(p, cm[1], b, cat), file) }), true; }
     if (m === 'DELETE' && cm) return send(200, { profile: updateProfile(p => deleteCharacter(p, cm[1]), file) }), true;

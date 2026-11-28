@@ -3,7 +3,7 @@
 User ruling 2026-11-17: when a card from another branch reaches you, you are testing it. Each such
 card takes a vote from −6 to +6, and a minus vote needs a comment. The votes form the def's
 **proposal vote collection**. This applies to effects, skills and classes (chaosD6-Effects,
-chaosD6-Skills and chaosD6-Classes).
+chaosD6-Skills and chaosD6-Classes) and, since 2026-11-25, to GameModels bundles (chaosD6-GameModels).
 
 Follow-up rulings (2026-11-17, the user's 5 answers):
 
@@ -24,9 +24,40 @@ Follow-up rulings (2026-11-17, the user's 5 answers):
 5. **No carry-over:** a new def version (a new sha256, or a new commit for commit-only refs) starts
    with an empty collection.
 
+Rulings of 2026-11-28 (these apply to every kind: effects, skills, classes and GameModels bundles
+from chaosD6-GameModels — NPCs, monsters, buildings, quests):
+
+6. **Tags.** Every vote may carry tags beside the number, saying what is wrong or right with it.
+   The list is `TAGS` / `TAG_LABELS` in `game/proposal-votes.mjs`:
+
+   | id | label |
+   |---|---|
+   | `overpowered` | Overpowered |
+   | `weak` | Weak |
+   | `too_simple` | Too simple |
+   | `out_of_theme` | Too out of theme |
+   | `duplicate` | Duplicating another |
+   | `confusing` | Confusing |
+   | `buggy` | Buggy / does not work |
+   | `fun` | Fun |
+   | `well_themed` | Fits the theme |
+   | `creative` | Creative |
+
+   Tags are optional on any vote, plus or minus. A minus vote still needs its comment. Unknown tags
+   are dropped, not refused (`normalizeTags`: trimmed, lower case, de-duplicated, sorted).
+7. **Needs rework.** The `review` flag (n ≥ 10 and mean ≤ −3) now means **NEEDS REWORK: that
+   version is not playable.** The caster's side leaves it out; the resolver never reads votes. This
+   replaces the 2026-11-22 ruling "shown grey, still playable". It lasts until the author pushes a
+   new version, which starts at 0 votes (ruling 5) and can be voted on again.
+8. **Publishable.** When n ≥ 10 and **more than 60 %** of the votes are positive (value > 0; 0 is
+   not positive), the version is publishable: its author may merge it to main, or open a patch when
+   they cannot merge. So 7 of 10 positive is publishable and 6 of 10 is not. A version that needs
+   rework is never publishable. GameModels have no rebalance check, so votes (plus the 8B review)
+   are their only gate.
+
 The code is in `game/proposal-votes.mjs` (core, store, signing, git, scheduler, collections) and
 `game/proposal-votes-publish.mjs` (publisher and collector, also a CLI). The HUD is
-`game/js/proposal_vote_ui.js`. The tests are `game/tools/proposal-votes-check.mjs` (136 checks).
+`game/js/proposal_vote_ui.js`. The tests are `game/tools/proposal-votes-check.mjs` (178 checks).
 The peer and HUD wiring is in the PV1–PV6 hunks of `game/tools/out/_pv_hunks.py`, which are not
 applied yet.
 
@@ -34,7 +65,7 @@ applied yet.
 
 | field | rule |
 |---|---|
-| `kind` | `effect` \| `skill` \| `class` (from the id prefix if not given) |
+| `kind` | `effect` \| `skill` \| `class` \| `gamemodels` (from the id prefix if not given; `npc_` / `bld_` / `mon_` = gamemodels) |
 | `repo`, `branch`, `id` | the def ref (defs-repo.mjs). `branch` must be `players/<who>/<slug>`; built-ins take no votes |
 | `sha256` / `commit` | the def version. At least one is needed: the full 64-hex sha256 or the full 40-hex commit |
 | `ns` | optional: the publisher's Radicle namespace (node NID `z6Mk…`) the def was read from. It is not part of the key |
@@ -44,16 +75,20 @@ applied yet.
 | `voter_nid`, `voter_name`, `voter_handles` | who votes: the node NID and the names used for the author check |
 | `value` | an integer from −6 to +6 |
 | `comment` | 500 characters at most, with control characters stripped. **Required and non-empty when value < 0** |
+| `tags` | optional (ruling 6): known tag ids only, sorted and de-duplicated; left out when empty. Part of the signed bytes |
 | `at` | the ISO time of the vote |
 | `dimension`, `door` | the game it was tested in. These are informational |
 | `sig` | base64 ed25519 over `"chaosd6-proposal-vote\n" + canonicalJson(vote without sig)` |
 
 Each voter has **one vote per voter per key**. The vote with the later `at` replaces the earlier one.
 
-The **collection** is `aggregate(votes, key)`, which gives `{ n, mean (2 dp), min, max, review,
-negatives: [{ voter, voter_name?, value, comment, at }] }`, where
-`review = n ≥ 10 && mean ≤ −3`. The flag is always derived again from n and mean, and a cached
-flag is never trusted.
+The **collection** is `aggregate(votes, key)`, which gives `{ n, mean (2 dp), min, max, positive,
+review, publishable, tags: { <tag>: count }, negatives: [{ voter, voter_name?, value, comment, at }] }`,
+where `positive` = the number of votes > 0,
+`review = needsRework = n ≥ 10 && mean ≤ −3` (ruling 7: not playable) and
+`publishable = n ≥ 10 && positive / n > 0.6 && !review` (ruling 8; `PUBLISH_MIN_VOTES`,
+`PUBLISH_POSITIVE_SHARE`). Both flags are always derived again from n, mean and positive, and a
+cached flag is never trusted.
 
 The collection is **never stored inside the def**, because that would change its sha256. Readers
 attach it in memory as `def.proposal_votes` (`withVoteCollection`).
@@ -96,10 +131,15 @@ folding: lower case, accents stripped, non-alphanumerics turned into `-`, so "P-
    `{ repos: { <rid>: { state, upto, count, voter, commit?, error?, tries, via, at } } }`. Both
    files are written atomically.
 2. **Peer WS:**
-   - `{ kind: 'proposal_vote', ref, value, comment }` gives
+   - `{ kind: 'proposal_vote', ref, value, comment, tags? }` gives
      `{ kind: 'proposal_vote_saved', ok, key, publish, mine | error, code }`.
    - On hello, and again after each publish run (`notify = broadcastUI`), the peer sends
-     `{ kind: 'proposal_votes', mine, me, collections, publish, limits }`.
+     `{ kind: 'proposal_votes', mine, me, collections, publish, limits, tags }`:
+     - `mine[key]` = `{ value, comment, tags, at, pub, pub_error? }`;
+     - `collections[key]` = `{ n, mean, positive, review, publishable, tags }`;
+     - `limits` = `{ min, max, comment_max, review_min_votes, review_mean_max, publish_min_votes,
+       publish_positive_share }`;
+     - `tags` = `[{ id, label }]`, the tag list in display order.
    - `mine[key].pub` is one of:
      - `saved`: stored, with a publish queued or running. An unsigned vote is saved and local only.
      - `published`: pushed and announced.
@@ -127,21 +167,27 @@ folding: lower case, accents stripped, non-alphanumerics turned into `-`, so "P-
    - The result goes to `<profile dir>/proposal_votes.collected.json` as
      `{ at, collections: { <key>: aggregate } }`.
 
-## Validator and badge (ruling 4)
+## Validator and badge (rulings 4, 6–8)
 
 - `validatorWithVotes(validate, { profileFile })` wraps a creation validator. Its verdict, with the
-  ±10 % tolerance, is returned unchanged plus `{ votes: { n, mean }, review }`. `review` is true only
-  with n ≥ 10 and mean ≤ −3. `verdictWithVotes(verdict, aggregate)` is the same rule as a pure
-  function.
+  ±10 % tolerance, is returned unchanged plus `{ votes: { n, mean }, review, publishable }`. `review`
+  is true only with n ≥ 10 and mean ≤ −3; `publishable` only with n ≥ 10 and more than 60 %
+  positive. `verdictWithVotes(verdict, aggregate)` is the same rule as a pure function.
 - `collectionOf(ref)` and `collectionsForUI()` read the collected file.
-- HUD:
+- HUD (`js/proposal_vote_ui.js`, mirrors of the peer constants are checked by the tests):
   - The panel and popup rows show "players +1.5 (12)".
-  - At review, they show **⚑ review**, and `setEffectSource(id, { …, review: true })` puts ⚑ on the
-    card's source badge.
-  - `effect_source.js` renders ⚑ for any source with `review: true` and adds a tooltip line.
+  - Needs rework: **⚑ needs rework — not playable**, and `setEffectSource(id, { …, review: true })`
+    puts ⚑ on the card's source badge (the card turns grey; `votedLow()` is true).
+  - Otherwise, when publishable: **✓ publishable (12 votes, 75 % positive)**.
+  - The 3 most frequent tags with their counts: "tags: Overpowered ×4 · Weak ×2 · Fun ×1".
+  - The vote control has a row of toggle chips, one per tag (from the hello's `tags`, else the
+    built-in copy). My saved tags start selected, are sent with the vote, and are listed in
+    "your vote +3 [Fun, Creative] · time".
+  - `effect_source.js` renders ⚑ for any source with `review: true` and adds the tooltip line
+    "⚑ NEEDS REWORK … not playable until its author pushes a new one".
 - Not wired yet: the handshakes' `validate` hooks (another session's files). Wrapping them with
-  `validatorWithVotes` is a one-line change per handshake when wanted. Today the flag is advisory:
-  it does not refuse a def.
+  `validatorWithVotes` is a one-line change per handshake when wanted. Leaving a needs-rework
+  version out of play is the caster's side (hand / deck building), never the resolver.
 
 ## Phone (Godot) — spec only, not implemented
 
@@ -181,8 +227,10 @@ folding: lower case, accents stripped, non-alphanumerics turned into `-`, so "P-
   - It shows these, in order:
     - the title "New player-made <kind> in testing", plus "+N more" when cards are queued;
     - the name and the compact badge;
-    - the players' mean and n, and ⚑ review when it applies;
+    - the players' mean and n, "⚑ needs rework — not playable" or "✓ publishable (n, % positive)"
+      when it applies, and the top 3 tags with counts;
     - an `HSlider` from −6 to +6 with step 1;
+    - one toggle `Button` per tag (hello `tags`), my saved tags pressed, sent as `tags`;
     - a `TextEdit` for the comment, with at most 500 characters;
     - the buttons **Vote** and **Later**.
   - It never calls `grab_focus()` on open. Tapping elsewhere on the map or the hand works normally,

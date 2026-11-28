@@ -2359,10 +2359,19 @@ function gmProposalRefs() {
   try { const a = JSON.parse(me?.gm_proposals_json || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
 }
 const gmVoteRef = (r) => ({ ...r, kind: 'gamemodels', repo: r.repo || 'chaosD6-GameModels' });
+// Seeing a proposal entry keeps it in my profile (user 2026-11-28): one gm_met per proposal version per session.
+const gmMetSent = new Set();
+function gmMet(r, name) {
+  if (!r?.id) return;
+  const key = `${r.id}:${r.branch || r.commit || r.sha256 || ''}`;
+  if (gmMetSent.has(key)) return;
+  gmMetSent.add(key);
+  send({ kind: 'gm_met', id: r.id, name: String(name || r.id), ref: { repo: r.repo, branch: r.branch, commit: r.commit, sha256: r.sha256, ns: r.ns, author: r.author, bundle: r.bundle } });
+}
 function gmProposalMet(e) {
   let own = null; try { own = e?.proposal_ref_json ? JSON.parse(e.proposal_ref_json) : null; } catch { own = null; }
   const r = own || gmProposalRefs().find(x => x.id === e?.npc_id);
-  if (r) pvSeen(gmVoteRef(r), e.name);
+  if (r) { gmMet(r, e.name); pvSeen(gmVoteRef(r), e.name); }
 }
 function gmProposalTick() {
   const refs = gmProposalRefs();
@@ -2370,6 +2379,11 @@ function gmProposalTick() {
   const me = state.entities.find(p => p.peer_id === state.myPeerId);
   if (!me || !Number.isInteger(me.tile_q)) return;
   const at = { q: me.tile_q, r: me.tile_r };
+  for (const e of state.entities) {   // in sight = met (the vote still waits for a talk / a fight)
+    let own = null; try { own = e.proposal_ref_json ? JSON.parse(e.proposal_ref_json) : null; } catch { own = null; }
+    const r = own || refs.find(x => x.id === (e.npc_id || e.creature_id));
+    if (r && Number.isInteger(e.tile_q) && hexDistanceQR(at, { q: e.tile_q, r: e.tile_r }) <= HERO_SIGHT_RADIUS) gmMet(r, e.name);
+  }
   for (const e of state.entities) {
     const r = !e.npc_id && refs.find(x => x.id === e.creature_id);
     if (r && (e.life ?? 0) > 0 && Number.isInteger(e.tile_q) && hexDistanceQR(at, { q: e.tile_q, r: e.tile_r }) <= 2) pvSeen(gmVoteRef(r), e.name);
@@ -2378,7 +2392,7 @@ function gmProposalTick() {
   if (!bld.length || !cat || !state.map?.seed) return;
   for (const v of villagesNear(state.map.seed, at.q, at.r, 40)) for (const l of villageTemplate(v)?.layout || []) {
     const r = bld.find(x => x.id === l.building);
-    if (r && hexDistanceQR(at, { q: v.q + l.at[0], r: v.r + l.at[1] }) <= HERO_SIGHT_RADIUS) pvSeen(gmVoteRef(r), `${v.name} ${cat.buildings[l.building]?.name || l.building}`);
+    if (r && hexDistanceQR(at, { q: v.q + l.at[0], r: v.r + l.at[1] }) <= HERO_SIGHT_RADIUS) { const n = `${v.name} ${cat.buildings[l.building]?.name || l.building}`; gmMet(r, n); pvSeen(gmVoteRef(r), n); }
   }
 }
 setInterval(() => { try { gmProposalTick(); } catch { /* not in a game yet */ } }, 2000);
@@ -2420,7 +2434,7 @@ function showObjectCard(obj, clientX, clientY, keepPos = false) {
   card.querySelector('.oc-name').textContent = obj.label || obj.kind;
   card.querySelector('.oc-kind').textContent = obj.obstacle
     ? `${obj.kind}${obj.owner_short ? ` · ${obj.mine ? 'yours' : obj.owner_name || obj.owner_short}` : ''}`
-    : `${obj.kind}${obj.family ? ` · ${obj.family}` : ''}${obj.biome ? ` · ${obj.biome}` : ''}`;
+    : `${obj.tower ? 'tower' : obj.kind}${obj.family ? ` · ${obj.family}` : ''}${obj.biome ? ` · ${obj.biome}` : ''}`;   // a village tower stays kind 'wall' for the rules
   // Stat pills: for an obstacle, show the element it answers to and the hp
   // threshold needed to destroy it outright. For anything else, hide the row.
   const statsEl = card.querySelector('.oc-stats');

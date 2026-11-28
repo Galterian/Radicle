@@ -94,7 +94,7 @@ import { mergeLedger, ledgerUnits, ledgerFor } from './js/world-ledger.js';
 const awakeLast = new Map();   // caster → the Awake plan of its last real (non-quiet) resolution (∀ lend)
 import { buildingBonusAt, bonusText, fortressAt, teleportTargets, wallArc, exploreTarget, dungeonAt, dungeonExplored, LEARN_REARM_TURNS } from './js/building-bonus.js';
 import { start as autosaveStart, loadTmj as autosaveLoadTmj } from './tools/autosave.mjs';
-import { loadProfile, characterOf, dropRandomDeckCard, addArchivedCard, removeArchivedCard, profilePath } from './profile.mjs';
+import { loadProfile, characterOf, dropRandomDeckCard, addArchivedCard, removeArchivedCard, profilePath, addMetCard, addMetClass, addMetGameModel, reworkOf } from './profile.mjs';
 import { pvHandle, pvHello } from './proposal-votes.mjs';   // PV: proposal votes on foreign defs (profile side store, never the state hash)
 import { definitionsCollectionText, catalogSourceOf } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { phylacteryConfig, possessArchivePick, phylacteryPick, releasedCompanions } from './possess.mjs';   // Possess / Phylactery (user ruling 2026-11-17)
@@ -383,14 +383,17 @@ function broadcastUI(msg) {
 }
 // Foreign effects (chaosD6-Effects E4, effects-handshake.mjs): refs on commit / reveal, fetch + serve over
 // /chaos/<dim>/effects/1 (bus `fx` fallback), `fx_have` on the slim snapshot. Inert with no foreign effect.
-const fxPeer = await createFxPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, dimId: DIM_ID, ui: (m) => broadcastUI(m), nameOf: (pid) => { try { return peersPublic.get(pid)?.name || null; } catch { return null; } } });
+const fxPeer = await createFxPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, dimId: DIM_ID, ui: (m) => broadcastUI(m), nameOf: (pid) => { try { return peersPublic.get(pid)?.name || null; } catch { return null; } },
+  onLearned: (p, src) => noteMetProposal('effect', p, src) });
 // S4 foreign skills (skills-handshake.mjs, skills-data/HANDSHAKE.md): sk_ref on commit / reveal, sk_missing, sk_have;
 // /chaos/<dim>/skills/1 + bus `sk`. Inert with no foreign skill.
 const skPeer = await createSkPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, dimId: DIM_ID, ui: (m) => broadcastUI(m), nameOf: (pid) => { try { return peersPublic.get(pid)?.name || null; } catch { return null; } },
+  onLearned: (p, src) => noteMetProposal('skill', p, src),
   onReady: (p) => { try { broadcastUI({ kind: 'skill_catalog', skill_ui: { [p.ref.id]: skillUiOf(p.ref.id) } }); } catch {} } });   // skill isolation: a ready foreign skill's UI facts (main.js skill_ui)
 // CH foreign classes (classes-handshake.mjs): cl_ref on commit / reveal + the holder's snapshot (cl_ref_json) and Door,
 // cl_missing, cl_have; /chaos/<dim>/classes/1 + bus `cl`. A ready foreign class joins CLASSES_IMPLEMENTED (classOf).
 const clPeer = await createClPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, dimId: DIM_ID, ui: (m) => broadcastUI(m), nameOf: (pid) => { try { return peersPublic.get(pid)?.name || null; } catch { return null; } },
+  onLearned: (p, src) => noteMetProposal('class', p, src),
   onReady: (p) => { try { CLASSES_IMPLEMENTED.add(p.ref.id); broadcastUI({ kind: 'class_catalog', class_colours: { [p.ref.id]: classColours(p.ref.id) }, class_texts: { [p.ref.id]: p.shape.text }, class_ui: { [p.ref.id]: classUiOf(p.ref.id) } }); } catch {} } });
 
 // -------- data layer (loaded directly from the shared folder) --------
@@ -831,6 +834,27 @@ if (DISCOVERY_URL) { setInterval(discoveryPoll, 5_000); setTimeout(discoveryPoll
 // -------- entity shape / local state --------
 let entity;
 // The profile character this peer plays (read once at startup), or null.
+// Met proposals (user 2026-11-28: "just seeing it saves it"): a player-made effect / skill / class another unit brought
+// into this game (learned through its handshake) or a GameModels proposal I met (the browser's gm_met) is kept in my
+// profile — profile.mjs addMetCard / addMetClass / addMetGameModel, one entry per proposal branch. My own profile's
+// cards come back as learned too: the profile dedupes them. Profile writes only; nothing here touches the game state.
+function noteMetProposal(kind, p, src) {
+  try {
+    if (!profileChar || !p?.ref?.id) return;
+    if (!p.ref.branch || p.ref.branch === 'main') return;   // a proposal lives on a player branch; another peer's main set is not one
+    const from = String(src || '').startsWith('peer:') ? (peersPublic.get(String(src).slice(5))?.name || 'a game') : 'a game';
+    const x = kind === 'class' ? addMetClass(PROFILE_FILE, { id: p.ref.id, name: p.def?.name || p.shape?.name || p.ref.name, data: { text: p.shape?.text || p.def?.data?.text || '' } }, p.ref, from)
+      : addMetCard(PROFILE_FILE, PROFILE_CHAR_ID, { kind, id: p.ref.id, ref: p.ref }, from);
+    if (x) { console.log(`[${PEER_LABEL}] met ${kind} ${p.ref.id} (${p.ref.branch || String(p.ref.sha256 || '').slice(0, 12)}) — ${x.updated ? 'updated to this version' : 'kept'} in the profile`); broadcastUI({ kind: 'met_proposal', what: kind, id: p.ref.id, name: x.name || p.ref.name || p.ref.id }); }
+  } catch (e) { console.warn(`[${PEER_LABEL}] met ${kind}: profile write failed: ${e.message}`); }
+}
+function noteMetGameModel(m) {
+  try {
+    if (!profileChar || typeof m?.id !== 'string' || !m.ref || typeof m.ref !== 'object') return;
+    const x = addMetGameModel(PROFILE_FILE, { id: m.id, name: typeof m.name === 'string' ? m.name : m.id, ref: m.ref }, 'a game');
+    if (x) { console.log(`[${PEER_LABEL}] met GameModels ${m.id} (${x.ref.branch || x.ref.commit || ''}) — kept in the profile`); broadcastUI({ kind: 'met_proposal', what: 'gamemodels', id: m.id, name: x.name }); }
+  } catch (e) { console.warn(`[${PEER_LABEL}] met GameModels: profile write failed: ${e.message}`); }
+}
 const profileChar = (() => {
   if (!PROFILE_FILE || !PROFILE_CHAR_ID || !CHARACTER_ID) return null;
   try {
@@ -1756,6 +1780,8 @@ if (profileChar) {
   for (const code of ['A', 'B', 'M', 'P']) for (let i = 0; i < (profileChar.actions?.[code] | 0); i++) pushAction(code);
   for (const x of profileChar.cards || []) {
     let c = cardFromRef(x);
+    const rw = !c && x.ref ? reworkOf(x.kind, x.ref, PROFILE_FILE) : null;
+    if (rw) { console.log(`[${PEER_LABEL}] profile: ${x.kind} ${x.id} needs rework (${rw.n} test votes, mean ${rw.mean}) — not played until its author updates it`); continue; }
     if (!c && x.ref) {   // FXG: a foreign card won earlier — rebuilt from the content cache (no transport yet)
       const fr = await foreignCardFromRef(x, { timeoutMs: 2000, why: 'profile', quiet: true });
       if (fr.status === 'ready') { c = fr.card; console.log(`[${PEER_LABEL}] profile: foreign ${x.kind} ${x.id} rebuilt (${fr.src})`); }
@@ -1933,6 +1959,8 @@ if (process.env.FOREIGN_CARD_REFS_JSON && !profileChar) {
   let refs = [];
   try { refs = JSON.parse(process.env.FOREIGN_CARD_REFS_JSON); } catch (e) { console.warn(`[${PEER_LABEL}] FOREIGN_CARD_REFS_JSON: ${e.message}`); }
   for (const x of (Array.isArray(refs) ? refs : []).filter(x => ['skill', 'effect'].includes(x?.kind) && x.ref).slice(0, 7)) {
+    const rw = reworkOf(x.kind, x.ref, PROFILE_FILE);
+    if (rw) { console.log(`[${PEER_LABEL}] test priority: my team's ${x.kind} ${x.id} needs rework (${rw.n} test votes, mean ${rw.mean}) — skipped`); continue; }
     const fr = await foreignCardFromRef(x, { timeoutMs: 2000, why: 'test priority', quiet: true });
     if (fr.status === 'ready') { deck.push(fr.card); console.log(`[${PEER_LABEL}] test priority: my team's ${x.kind} ${x.id} in my deck (${fr.src})`); }
     else if (fr.status === 'missing') { profileForeignPending.push(x); console.log(`[${PEER_LABEL}] test priority: my team's ${x.kind} ${x.id} not cached — fetching once connected`); }
@@ -8100,17 +8128,25 @@ function villageSpawnerFor(at, radius) {
 // The phone (2026-11-27, 700–900 MB): every villager is a whole peer.mjs worker in the app's one Node process, so all
 // villages and wanderers together keep at most VILLAGE_MAX_MOBILE out (desktop: separate processes, no cap).
 const VILLAGE_MAX_MOBILE = Number(process.env.VILLAGE_MAX_MOBILE ?? 5);
+// A layout-2 village's posted engines (2 catapults + 1 ballista, user 2026-11-28 "I don't see the catapult and the
+// ballista" on the phone) hold their wall post and only shoot: on the phone they get an allowance of their own, so no
+// villager gives up its worker slot for them.
+const VILLAGE_SIEGE_MOBILE = Number(process.env.VILLAGE_SIEGE_MOBILE ?? 3);
+const villageSpawningSiege = new Set();
 function spawnVillager(v, u, extra = {}) {
   const npc = GAMEMODELS.npcs[u.npc];
   if (!npc || villageSpawning.has(u.label)) return;
-  if (IS_MOBILE && companions.filter(c => c.village).length + villageSpawning.size >= VILLAGE_MAX_MOBILE) return;
+  const siegePost = u.post === 'siege';
+  if (IS_MOBILE && siegePost && companions.filter(c => c.village && c.siegePost).length + villageSpawningSiege.size >= VILLAGE_SIEGE_MOBILE) return;
+  if (IS_MOBILE && !siegePost && companions.filter(c => c.village && !c.siegePost).length + villageSpawning.size - villageSpawningSiege.size >= VILLAGE_MAX_MOBILE) return;
   villageSpawning.add(u.label);
+  if (siegePost) villageSpawningSiege.add(u.label);
   const env = { CHARACTER_ID: '', CREATURE_ID: u.npc, ENTITY_NAME: u.name, ALLIANCE: v.alliance, NPC_ID: u.npc, VILLAGE_ID: v.id, HOME_Q: String(u.q), HOME_R: String(u.r),
     PROFILE_TEAM: v.team, AI_ROLE: npc.role === 'builder' && !v.wall ? 'builder' : '', BUILDER_RING_RADIUS: String(Math.max(3, (v.clear_radius ?? 9) - 1)), WILD_LURKERS: '0', ...extra };
   spawnCompanion(null, { creature_id: u.npc, name: u.name, at: u.at || { q: u.q, r: u.r }, wild: true, label: u.label, ignore: u.ignore || null, env })
-    .then(tag => { const c = companions.find(x => x.label === tag); if (c) c.village = v.id; if (tag) console.log(`[${PEER_LABEL}] village: ${u.name} walks out of ${v.team} at (${u.q},${u.r})`); })
+    .then(tag => { const c = companions.find(x => x.label === tag); if (c) { c.village = v.id; c.siegePost = siegePost; } if (tag) console.log(`[${PEER_LABEL}] village: ${u.name} walks out of ${v.team} at (${u.q},${u.r})`); })
     .catch(e => console.warn(`[${PEER_LABEL}] village: ${u.name} could not walk out: ${e.message}`))
-    .finally(() => setTimeout(() => villageSpawning.delete(u.label), 15_000));
+    .finally(() => setTimeout(() => { villageSpawning.delete(u.label); villageSpawningSiege.delete(u.label); }, 15_000));
 }
 // The ledger's gone villagers: `vgone:<label>` { turn } (died; older edits: the turn of their action), `venvoy:<label>`
 // { turn } (a diplomat who stayed in the other village), `vrec:<label>` (led away by a hero: null until it dies too).
@@ -8165,8 +8201,8 @@ function villageTick() {
     const war = villageRelations(MAP_SEED, v, ledger).some(x => x.war);
     const can = units.filter(u => livePeer(u.label) || known(u.q, u.r));
     // a layout-2 village's posted engines (2026-11-28) are active units too — on slots of their own, so no villager
-    // gives its slot up for them (desktop; the phone's worker cap stays what it is)
-    const sieges = IS_MOBILE ? 0 : can.filter(u => u.post === 'siege').length;
+    // gives its slot up for them (the phone: their own allowance, VILLAGE_SIEGE_MOBILE in spawnVillager)
+    const sieges = can.filter(u => u.post === 'siege').length;
     const pick = [...activeUnits(can.filter(u => !isFighter(u)), VILLAGE_ACTIVE + sieges), ...(war ? activeUnits(can.filter(isFighter), VILLAGE_FIGHTERS) : [])];
     if (war !== villageAtWar.get(v.id)) { villageAtWar.set(v.id, war); if (war) console.log(`[${PEER_LABEL}] village: ${v.team} is at war — its fighters walk out`); }
     for (const u of pick) if (!livePeer(u.label)) spawnVillager(v, u);
@@ -10005,6 +10041,7 @@ wss.on('connection', (ws) => {
       // `now: true` = the "Encounter defeated" banner (user 2026-11-23): leave at once, no channel (dimOutNow checks).
       if (m.kind === 'banter') banterFor(m.ids).catch(e => console.log(`[${PEER_LABEL}] banter: ${e.message}`));
       // a villager's card: its questions (m.topic absent) or my question to it (talkTo)
+      if (m.kind === 'gm_met') { noteMetGameModel(m); return; }   // a GameModels proposal I met (main.js gmProposalMet / gmProposalTick)
       if (m.kind === 'talk' && typeof m.npc === 'string') { try { ws.send(JSON.stringify(typeof m.topic === 'string' ? talkTo(m.npc, m.topic) : talkMenuMsg(m.npc))); } catch (e) { console.warn(`[${PEER_LABEL}] talk: ${e.message}`); } }
       if (m.kind === 'dim_out' && m.now === true) dimOutNow();
       else if (m.kind === 'dim_out') {

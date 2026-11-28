@@ -99,7 +99,7 @@ export function normalizeSource(s, kind = null) {
     kind: k,
     ...(/^z6Mk[1-9A-HJ-NP-Za-km-z]{40,50}$/.test(String(s.ns || '')) ? { ns: String(s.ns) } : {}),   // PV: publisher namespace (author check)
     ...(s.review === true ? { review: true } : {}),
-    ...(s.custom === true ? { custom: true } : {}),   // a player-made (generated) card — the "custom" badge (2026-11-23)                                              // PV: players' votes flag it for review
+    ...(s.custom === true ? { custom: true } : {}),   // a player-made (generated) card — the "custom" badge (2026-11-23)                                              // PV: players' votes flag it NEEDS REWORK (not playable, 2026-11-28)
   };
 }
 
@@ -172,7 +172,7 @@ export function sourceTitle(src) {
     `Player ${KINDS.has(src.kind) ? src.kind : 'effect'} — from ${src.repo} branch ${src.branch}`,
     src.author ? `author: ${src.author}` : '',
     `validator: ${v ? `${v.glyph} ${v.label}` : 'not checked'}`,
-    src.review ? 'players: ⚑ REVIEW — 10+ test votes with a mean of −3 or lower (shown grey; still playable)' : '',   // PV
+    src.review ? 'players: ⚑ NEEDS REWORK — 10+ test votes with a mean of −3 or lower: this version is not playable until its author pushes a new one' : '',   // PV ruling 2026-11-28
     src.commit ? `commit ${_short(src.commit, 7)}` : '',
     src.sha256 ? `sha256 ${_short(src.sha256, 12)}` : '',
   ].filter(Boolean).join('\n');
@@ -187,11 +187,13 @@ export function sourceBadgeHtml(src, { compact = false } = {}) {
     + (src.custom ? '<span class="fx-src-cu" title="made by a player (custom)">custom</span>' : '')
     + (!compact && src.author ? `<span class="fx-src-au">${_esc(src.author)}</span>` : '')
     + (v ? `<span class="fx-src-v" aria-label="${_esc(v.label)}">${v.glyph}</span>` : '')
-    + (src.review ? '<span class="fx-src-rv" aria-label="players flagged it for review" style="color:#ff9b5b;margin-left:2px">⚑</span>' : '')   // PV: votes n ≥ 10, mean ≤ −3
+    + (src.review ? '<span class="fx-src-rv" aria-label="needs rework — not playable" style="color:#ff9b5b;margin-left:2px">⚑</span>' : '')   // PV: votes n ≥ 10, mean ≤ −3
     + '</span>';
 }
-// User ruling 2026-11-22: a player card whose test votes are too low (the review flag: 10+ votes, mean −3 or lower)
-// is shown GREY — still playable (votes are profile data, never game rules).
+// User ruling 2026-11-28 (replaces the 2026-11-22 "grey but playable" one): a player card version whose test votes are too
+// low (the review flag: 10+ votes, mean −3 or lower) NEEDS REWORK — it is shown grey and is NOT playable (the caster's
+// side leaves it out, never the resolver: votes are profile data, never game rules) until its author pushes a new
+// version, which starts at 0 votes. votedLow(x) = true when that flag is set.
 export const votedLow = (x) => !!effectSource(x)?.review;
 // Convenience: badge HTML for anything effectSource() takes ('' when built-in).
 export const effectSourceBadge = (x, opts) => sourceBadgeHtml(effectSource(x), opts);

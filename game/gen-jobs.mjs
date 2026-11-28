@@ -7,6 +7,10 @@
 // One job at a time per node (the 8B serves one request at a time; a test game is ~4 min of CPU). The job writes its
 // status line every 10 s in the CLI's "[gen] …" / "[test] …" format; the editor polls GET /rules/api/gen/drafts/<id>.
 // Generation runs in this process (effect-gen.mjs); a test runs tools/effect-gen-test.mjs as a child process.
+// A GameModels draft (npc / building / monster) has no rebalance verdict: its gate is the GameModels check (checkBundle),
+// the 8B's REVIEW (draft.review = { verdict: good | needs_work, summary, suggestions, model, where, at } — from its test
+// game, or asked alone with review(id)) and, once published, the players' votes. Publishing one needs a review verdict
+// of its current definition (or an explicit "without the review": the 8B unreachable).
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -15,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { genConfig, generateEffect, saveDraft, formatStatus, checkDraft, validatorReport } from './effect-gen.mjs';
 import { generateSkill } from './skill-gen.mjs';
 import { generateClass } from './class-gen.mjs';
-import { GM_KINDS, generateGameModel, bundleFromRepo, gmLook, checkBundle } from './gm-gen.mjs';
+import { GM_KINDS, generateGameModel, bundleFromRepo, gmLook, checkBundle, reviewGameModel } from './gm-gen.mjs';
 import { tagsPrompt, tagProblems, cleanTags } from './gen-tags.mjs';
 import { profileDir } from './profile.mjs';
 import { deviceSigner, authHeaders, OCI_URLS } from './oci-auth.mjs';
@@ -56,7 +60,7 @@ const nowIso = () => new Date().toISOString();
 export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), draftsDir = path.join(profileDir(), 'effect-drafts'),
   skillDraftsDir = path.join(path.dirname(draftsDir), 'skill-drafts'), classDraftsDir = path.join(path.dirname(draftsDir), 'class-drafts'),
   llmFile = path.join(profileDir(), 'llm.json'), env = process.env, generate = generateOf, spawnImpl = spawn, statsImpl = null, fetchImpl = (...a) => globalThis.fetch(...a),
-  everyMs = STATUS_EVERY_MS, testMinutes = Number(env.GEN_TEST_MINUTES) || 3, log = () => {} } = {}) {
+  everyMs = STATUS_EVERY_MS, testMinutes = Number(env.GEN_TEST_MINUTES) || 3, reviewImpl = reviewGameModel, log = () => {} } = {}) {
   let current = null;   // { draft_id, what: 'generate' | 'test', child? }
   const gmDraftsDir = path.join(path.dirname(draftsDir), 'gm-drafts');
   const defsDir = (kind) => (kind === 'skill' ? skillDraftsDir : kind === 'class' ? classDraftsDir : isGm(kind) ? gmDraftsDir : draftsDir);
@@ -69,16 +73,23 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
     const t = x.test || {};
     const head = isGm(x.kind) ? `${t.pass ? 'PASS' : 'FAIL'} · ${gmBrief(x.kind, t)}${t.why?.length ? ` — ${t.why.join('; ')}` : ''}${t.notes?.length ? ` (${t.notes.join('; ')})` : ''}${x.kind === 'npc' && t.talk?.length ? `\n${t.talk.slice(0, 6).map(c => `  «${c.ask}» → «${c.answer}»`).join('\n')}` : ''}`
       : `${t.pass ? 'PASS' : 'FAIL'} · ${x.kind === 'skill' ? 'plays' : x.kind === 'class' ? 'uses' : 'casts'} ${t.casts ?? 0}, lands ${t.lands ?? 0} · errors ${t.errors ?? 0} · divergences ${t.divergences ?? 0}${t.why?.length ? ` — ${t.why.join('; ')}` : ''}`;
-    const rv = t.review ? (t.review.error ? `review: ${t.review.error}` : [`review: ${t.review.summary || ''}`, ...(t.review.suggestions || []).map(s => `  → ${s}`)].join('\n')) : '';
+    const rv = t.review ? (t.review.error ? `review: ${t.review.error}` : [`review${t.review.verdict ? ` (8B: ${t.review.verdict === 'good' ? 'good' : 'needs work'})` : ''}: ${t.review.summary || ''}`, ...(t.review.suggestions || []).map(s => `  → ${s}`)].join('\n')) : '';
     x.talk = [...(x.talk || []), { role: 'test', at: nowIso(), text: [head, rv].filter(Boolean).join('\n').slice(0, 3000) }].slice(-120);
   };
   const setState = (d, state, why = '') => { d.state = state; note(d, `state: ${state}${why ? ` — ${why}` : ''}`); };
+  // a GameModels draft: the 8B's review of its test → draft.review (a verdict); an errored review keeps no verdict
+  const keepReview = (x, rv) => {
+    if (!isGm(x.kind) || !rv) return;
+    if (rv.verdict) { x.review = { verdict: rv.verdict, summary: rv.summary || '', suggestions: rv.suggestions || [], model: rv.model || null, where: rv.where || (x.test?.where === 'oci' ? 'oci' : null), at: rv.at || nowIso(), from: 'test' }; note(x, `[review] 8B: ${rv.verdict}`); }
+    else if (rv.error) { x.review = { error: String(rv.error).slice(0, 300), at: nowIso(), from: 'test' }; note(x, `[review] ${rv.error}`); }
+  };
 
   // A node restart mid-job: the job is gone, the draft goes back to what it was.
   const resumable = [];
   try {
     for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.json'))) {
       const d = read(f.slice(0, -5));
+      if (d?.reviewing) { delete d.reviewing; d.status = ''; note(d, '[review] interrupted (the node restarted)'); write(d); }
       if (!d || !['generating', 'testing', 'publishing'].includes(d.state)) continue;
       if (d.state === 'testing' && d.remote_test) { resumable.push(d.draft_id); continue; }   // the OCI game went on: poll it again (below)
       setState(d, d.state === 'publishing' ? 'testing success' : d.def ? 'preview' : 'no draft', 'interrupted (the node restarted)');
@@ -87,7 +98,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
   } catch {}
 
   const summary = (d) => ({ draft_id: d.draft_id, kind: d.kind, idea: d.idea, state: d.state, fails: d.fails | 0, name: d.def?.name || '',
-    id: d.def?.id || '', verdict: d.verdict || null, status: d.status || '', updated_at: d.updated_at, published: d.published || null });
+    id: d.def?.id || '', verdict: d.verdict || null, ...(isGm(d.kind) ? { review: d.review?.verdict || null } : {}), status: d.status || '', updated_at: d.updated_at, published: d.published || null });
   const busy = () => (current ? { draft_id: current.draft_id, what: current.what } : null);
   const refuseBusy = () => { if (current) throw Object.assign(new Error(`busy: ${current.what === 'test' ? 'a test game' : 'a generation'} is running (${current.draft_id}) — one at a time`), { status: 409 }); };
 
@@ -128,6 +139,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
     if (r.def) {
       if (!isGm(x.kind)) applyResources(x.kind, r.def, x.resources);   // the player's picture / sound (not priced: the verdict stands); a GameModels look is applied by its generator
       x.def = r.def; x.verdict = r.verdict; x.problems = r.problems || [];
+      if (isGm(x.kind)) delete x.review;   // the 8B's review was of the earlier definition
       x.tag_problems = r.tag_problems || [];
       for (const p of x.tag_problems) note(x, `[tags] ${p}`);
       // a GameModels monster: { power, base_power, range } of the creature power score (gm-gen.mjs monsterBalance)
@@ -166,7 +178,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
     return new Promise((resolve) => {
       const out = path.join(dir, `${d.draft_id}.test.json`);
       try { fs.rmSync(out, { force: true }); } catch {}
-      const child = spawnImpl(process.execPath, [path.join(HERE, 'tools', isGm(d.kind) ? 'gm-gen-test.mjs' : 'effect-gen-test.mjs'), d.file, '--minutes', String(testMinutes), '--every', String(Math.round(everyMs / 1000)), '--out', out, '--review'],
+      const child = spawnImpl(process.execPath, [path.join(HERE, 'tools', isGm(d.kind) ? 'gm-gen-test.mjs' : 'effect-gen-test.mjs'), d.file, '--minutes', String(testMinutes), '--every', String(Math.round(everyMs / 1000)), '--out', out, '--review', '--llm-file', llmFile],
         { cwd: HERE, env: { ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
       if (current) current.child = child;
       let buf = '';
@@ -186,6 +198,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
         x.status = '';
         x.test = res ? testOf(d.kind, res) : { pass: false, why: [`the test runner exited with code ${code} and no result`] };
         x.suggestions = res?.review?.suggestions || [];
+        keepReview(x, res?.review);
         talkTest(x);
         if (x.test.pass) setState(x, 'testing success', isGm(d.kind) ? gmBrief(d.kind, x.test) : `cast ${res.casts}×, landed ${res.lands}×`);
         else { x.fails = (x.fails | 0) + 1; setState(x, `testing failed ${x.fails}`, x.test.why.join('; ')); }
@@ -247,6 +260,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
     x.status = ''; delete x.remote_test;
     x.test = testOf(x.kind, res, { where: 'oci' });
     x.suggestions = res.review?.suggestions || [];
+    keepReview(x, res.review);
     talkTest(x);
     if (x.test.pass) setState(x, 'testing success', `on OCI: ${isGm(x.kind) ? gmBrief(x.kind, x.test) : `cast ${res.casts}×, landed ${res.lands}×`}`);
     else { x.fails = (x.fails | 0) + 1; setState(x, `testing failed ${x.fails}`, x.test.why.join('; ')); }
@@ -368,11 +382,41 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
       note(d, `media: ${pick?.npc || pick?.building ? `looks like ${pick.npc || pick.building}` : pick?.unit ? `unit ${pick.unit.race}/${pick.unit.unit} (${pick.unit.sounds.length} sounds)` : pick ? [pick.sprite, pick.sound].filter(Boolean).map(p => path.basename(p)).join(' + ') : 'none'}`);
       return write(d);
     },
-    /** publish step bookkeeping (gen-api.mjs does the validate + publishDefinition). */
-    beginPublish(id) {
+    /** A GameModels draft: ask the 8B for its review of the definition shown (+ its last test, if any) — no new test game. */
+    review(id) {
+      const d = read(id);
+      if (!d) throw Object.assign(new Error('no such draft'), { status: 404 });
+      if (!isGm(d.kind)) throw Object.assign(new Error('the 8B review is for GameModels drafts (effects, skills and classes have the rebalance validator)'), { status: 400 });
+      if (!d.def) throw Object.assign(new Error('no definition to review yet'), { status: 409 });
+      if (RUNNING_STATES.includes(d.state)) throw Object.assign(new Error(`cannot review while ${d.state}`), { status: 409 });
+      refuseBusy();
+      d.reviewing = true; d.status = '[review] asking the 8B'; d.status_at = nowIso(); note(d, '[review] asking the 8B'); write(d);
+      start(d, 'review', async () => {
+        const cfg = genConfig(env, { file: llmFile });
+        let rv;
+        try { rv = await reviewImpl(d.def, { test: d.test || null, check: d.check || null, cfg }); } catch (e) { rv = { error: e.message }; }
+        const x = read(d.draft_id) || d;
+        delete x.reviewing; x.status = '';
+        if (rv?.verdict) {
+          x.review = { verdict: rv.verdict, summary: rv.summary || '', suggestions: rv.suggestions || [], model: rv.model || cfg.model || null, where: rv.where || null, at: rv.at || nowIso(), from: 'review' };
+          x.suggestions = [...new Set([...(rv.suggestions || []), ...(x.suggestions || [])])].slice(0, 8);
+          note(x, `[review] 8B: ${rv.verdict}`);
+          x.talk = [...(x.talk || []), { role: 'test', at: nowIso(), text: [`review (8B: ${rv.verdict === 'good' ? 'good' : 'needs work'}): ${rv.summary || ''}`, ...(rv.suggestions || []).map(s => `  → ${s}`)].join('\n').slice(0, 3000) }].slice(-120);
+        } else {
+          x.review = { error: String(rv?.error || 'no answer').slice(0, 300), at: nowIso(), from: 'review' };
+          note(x, `[review] ${x.review.error}`);
+        }
+        write(x);
+      });
+      return read(id);
+    },
+    /** publish step bookkeeping (gen-api.mjs does the validate + publishDefinition). withoutReview: a GameModels draft
+     *  published although the 8B gave no verdict (the author confirmed it). */
+    beginPublish(id, { withoutReview = false } = {}) {
       const d = read(id);
       if (!d) throw Object.assign(new Error('no such draft'), { status: 404 });
       if (d.state !== 'testing success') throw Object.assign(new Error(`publish needs "testing success" (now: ${d.state})`), { status: 409 });
+      if (isGm(d.kind) && !d.review?.verdict && !withoutReview) throw Object.assign(new Error(`the 8B has not reviewed this ${d.kind} yet${d.review?.error ? ` (${d.review.error})` : ''} — ask for its review first, or publish without it`), { status: 409, code: 'no_review' });
       if (d.proposal) throw Object.assign(new Error(`this is ${d.proposal.team}'s proposal (${d.proposal.branch}) — vote on it; it is not yours to publish`), { status: 409 });
       refuseBusy();
       setState(d, 'publishing'); write(d);

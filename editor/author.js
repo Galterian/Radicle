@@ -783,13 +783,41 @@ async function openMine() {
       let t = null; try { t = await template(it.kind); } catch { /* hints only */ }
       openDefEditor({ kind: it.kind, def: clone(d), hints: t && t.hints, title: `Edit ${it.id}`, key: `def:${it.kind}:${it.id}` });
     });
-    return h('div', { class: 'au-item' }, h('b', { text: it.kind || '?' }), h('span', { class: 'au-mono', text: it.id || '?' }),
-      pill(state, state), meta, h('div', { class: 'au-bar', style: 'grid-column:1/-1' }, open, state === 'pending' ? retry : null));
+    // the players' vote collection of this version (user 2026-11-28): n, % positive, top tags, needs rework / publishable
+    const v = it.votes || null;
+    const voteLine = v ? h('div', { class: 'au-meta au-votes', style: 'grid-column:1/-1' },
+      h('span', { text: v.n ? `${v.n} vote(s) · ${v.share} % positive · mean ${Number(v.mean).toFixed(1)}` : 'no votes yet' }),
+      v.needs_rework ? pill('needsrework', 'needs rework') : v.publishable ? pill('ok', 'publishable') : v.n ? h('span', { class: 'au-hint', text: ` · publishable at ≥ ${v.need?.votes ?? 10} votes and > ${Math.round((v.need?.positive_share ?? 0.6) * 100)} % positive` }) : null,
+      (v.top_tags || []).length ? h('span', { class: 'au-hint', text: ` · ${v.top_tags.map(t => `${t.label} ×${t.n}`).join(', ')}` }) : null,
+      v.needs_rework ? h('div', { class: 'au-hint', text: 'This version is not played until you push a new version (it starts again at 0 votes).' }) : null) : null;
+    const m = it.main && it.main.sha256 === it.sha256 ? it.main : null;
+    const mainLine = m ? h('div', { class: 'au-meta', style: 'grid-column:1/-1', text: m.state === 'merged' ? `In main @${short(m.commit)} (${String(m.at || '').slice(0, 10)})`
+      : m.state === 'patch' ? `Patch ${short(m.patch)} opened for the maintainer (${String(m.at || '').slice(0, 10)})` : `Publish to main failed: ${m.error || '?'}` }) : null;
+    const toMain = h('button', { class: 'au-btn au-primary', type: 'button', text: 'Publish to main…', title: 'Merge it into main (or open a patch for the maintainer)' });
+    toMain.addEventListener('click', () => busy(toMain, async () => {
+      // 1) a dry run: every check, nothing changes — shows whether this node merges or opens a patch
+      let plan;
+      try { plan = await C.api('definitions/main', { method: 'POST', body: { kind: it.kind, id: it.id, dry: true } }); }
+      catch (e) { C.toast(errText(e), 'error'); return; }
+      if (!plan || !plan.ok) { C.toast((plan && plan.error) || 'the checks did not pass', 'error'); return; }
+      const how = plan.mode === 'merge' ? `This node is a delegate of the repo: ${it.id} is merged into main and published through the repo checks.` : `This node cannot merge (${(plan.rights && plan.rights.why) || 'not a delegate'}): a Radicle patch is opened for the maintainer.`;
+      const ok = await C.confirm(`Publish ${it.id} to main?`, h('div', null, h('p', { text: how }), h('div', { class: 'au-hint', text: 'Checks (dry run, nothing changed yet):' }),
+        h('ul', null, (plan.steps || []).map(s => h('li', { text: s })))));
+      if (!ok) return;
+      let r;
+      try { r = await C.api('definitions/main', { method: 'POST', body: { kind: it.kind, id: it.id, dry: false } }); }
+      catch (e) { r = (e && e.body) || { ok: false, error: errText(e) }; }
+      C.toast(r && r.ok ? (r.mode === 'merge' ? `${it.id} is in main` : `Patch opened for the maintainer${r.patch ? ` (${short(r.patch)})` : ''}`) : `Not published to main: ${(r && r.error) || '?'}`, r && r.ok ? 'ok' : 'error');
+      await load();
+    }));
+    const canMain = state === 'published' && v && v.publishable && !v.needs_rework && !(m && m.state === 'merged');
+    return h('div', { class: 'au-item' }, h('b', { text: it.kind === 'gamemodels' ? (it.gm_kind || 'gamemodels') : it.kind || '?' }), h('span', { class: 'au-mono', text: it.id || '?' }),
+      pill(state, state), meta, voteLine, mainLine, h('div', { class: 'au-bar', style: 'grid-column:1/-1' }, open, state === 'pending' ? retry : null, canMain ? toMain : null));
   };
   reload.addEventListener('click', load);
   await load();
   return pane(`${teamName()}'s definitions`, [
-    h('p', { class: 'au-hint', text: `Skills, effects and classes ${teamName()} committed on its players/${team().slug || '<team>'}/… branches.` }),
+    h('p', { class: 'au-hint', text: `Skills, effects, classes and GameModels (NPCs, buildings, monsters) ${teamName()} committed on its players/${team().slug || '<team>'}/… branches, with the players' votes on each version. With at least 10 votes and more than 60 % of them positive a version is publishable: "Publish to main" merges it (a delegate of the repo) or opens a patch for the maintainer.` }),
     list, h('div', { class: 'au-bar' }, reload,
       h('button', { class: 'au-btn', type: 'button', text: 'New …', title: 'New skill, effect or class', onclick: () => C.navigate('#/new/') })),
   ]);

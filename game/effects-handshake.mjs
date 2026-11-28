@@ -535,7 +535,7 @@ export async function attachDefsRpc({ proto, busKind, selfId, handle, log = () =
 
 // ------------------------------------------------------------------ the peer adapter (peer.mjs glue)
 const envMs = (name, dflt) => { const v = Number(process.env[name]); return Number.isFinite(v) && v >= 0 ? v : dflt; };
-export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {}, log: logIn = null, nameOf = () => null } = {}) {
+export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {}, log: logIn = null, nameOf = () => null, onLearned: learnedOut = null } = {}) {
   const log = logIn || ((line) => console.log(`[${label}] fx: ${line}`));
   const bundled = bundledEffectSet();
   const builtinRules = { ...EFFECT_RULES };
@@ -576,7 +576,7 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
   const sync = createFxSync({
     selfId, store, cache, fallbackFetchers, libFallbackFetchers, log, opts: process.env.FX_PREFETCH === '0' ? { prefetch: false } : {},   // FXG: FX_PREFETCH=0 (tests) — no fx_have prefetch
     request: (peerId, msg) => (request ? request(peerId, msg) : Promise.reject(Object.assign(new Error('no transport yet'), { code: 'NO_ROUTE' }))),
-    onLearned: (p, src) => { active = true; log(`learned ${p.ref.id} (${prefixOf(p.ref.sha256)}, ${p.ref.branch || 'no branch'}, verdict ${p.verdict}) from ${src}`); notice('learned', p, src && src.startsWith('peer:') ? src : null); },
+    onLearned: (p, src) => { active = true; log(`learned ${p.ref.id} (${prefixOf(p.ref.sha256)}, ${p.ref.branch || 'no branch'}, verdict ${p.verdict}) from ${src}`); notice('learned', p, src && src.startsWith('peer:') ? src : null); try { learnedOut?.(p, src); } catch {} },
     onShared: (p, peer) => { log(`shared ${p.ref.id} (${prefixOf(p.ref.sha256)}) with ${peer}`); notice('shared', p, peer); },
   });
   const REVEAL_WAIT = envMs('FX_REVEAL_WAIT_MS', 1500), RESOLVE_WAIT = envMs('FX_RESOLVE_WAIT_MS', 4000), POSTPONE_MAX = envMs('FX_POSTPONE_MAX', 3);

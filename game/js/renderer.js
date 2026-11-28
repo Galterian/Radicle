@@ -200,10 +200,14 @@ const ZOOM_MIN = 0.35, ZOOM_MAX = 1.6;
 // left out) and stretched centre to centre, so neighbouring pieces always overlap. Geometry only here
 // ({ kind, x | x0..x1, y | y0..y1, key }); images resolve at draw time.
 const WALL_S = 0.64;   // sprite px → map px: a horizontal piece's body (≈62 px) spans about half a hex step
-const WALL_RANK = { vertical: 0, horizontal: 1, joint: 2 };
+const WALL_RANK = { vertical: 0, horizontal: 1, joint: 2, tower: 3 };
 function buildVillageWalls(seed, features) {
-  const shown = new Set(), firstOf = new Map(), pieces = [];
-  for (const it of features) if (it.f.village?.wall) { shown.add(`${it.q},${it.r}`); if (!firstOf.has(it.f.village.id)) firstOf.set(it.f.village.id, it); }
+  const shown = new Set(), firstOf = new Map(), pieces = [], towerPath = new Map();
+  for (const it of features) if (it.f.village?.wall) {
+    shown.add(`${it.q},${it.r}`);
+    if (it.f.tower && it.f.path) towerPath.set(`${it.q},${it.r}`, it.f.path);   // layout 2: a watchtower stands in the run
+    if (!firstOf.has(it.f.village.id)) firstOf.set(it.f.village.id, it);
+  }
   for (const [vid, it] of firstOf) {
     const v = villageAround(seed, it.q, it.r), ring = villageWallRing(v);
     if (!ring) continue;
@@ -222,9 +226,10 @@ function buildVillageWalls(seed, features) {
     }
     for (let i = 0; i < n; i++) {
       const h = H[i];
-      if (h.gate || !seen(h) || !(h.corner || H[(i + 1) % n].gate || H[(i + n - 1) % n].gate)) continue;
-      const P = hexToPixel(h.q, h.r);
-      add({ kind: 'joint', x: P.x, y: P.y }, P.y);
+      if (h.gate || !seen(h)) continue;
+      const P = hexToPixel(h.q, h.r), tp = towerPath.get(`${h.q},${h.r}`);
+      if (tp) { add({ kind: 'tower', x: P.x, y: P.y, path: tp }, P.y); continue; }   // a broken tower is vacant → a gap
+      if (h.corner || H[(i + 1) % n].gate || H[(i + n - 1) % n].gate) add({ kind: 'joint', x: P.x, y: P.y }, P.y);
     }
   }
   return pieces.sort((a, b) => a.key - b.key || WALL_RANK[a.kind] - WALL_RANK[b.kind]);
@@ -313,6 +318,13 @@ function wallBody(img) {   // the opaque body of a wall sprite (the shadow is al
   return b;
 }
 function drawWallPiece(ctx, p, seed, hexH) {
+  if (p.kind === 'tower') {   // the village's watchtower (its building sprite, first frame), a little taller than a building
+    const tex = featureImage(p.path);
+    if (!tex) return;
+    const sx = frameW(tex.img), sy = tex.img.naturalHeight || 1, k = Math.min(1.4, Math.max(0.25, hexH * 1.5 / sy));
+    ctx.drawImage(teamSource(tex, villageColour(seed, p.vid)), 0, 0, sx, sy, p.x - sx * k / 2, p.y + hexH * 0.2 - sy * k, sx * k, sy * k);
+    return;
+  }
   const tex = featureImage(p.sprites[p.kind] || p.sprites.joint);
   if (!tex) return;
   const src = teamSource(tex, villageColour(seed, p.vid)), b = wallBody(tex.img);

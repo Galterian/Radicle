@@ -12,8 +12,12 @@
 //   POST retry    { draft_id, extra, suggestions[], tags?, resources? } → { draft }   regenerates from the preview + the changes
 //   POST media    { draft_id, resources }                → { draft }   the picture / sound only (not priced, no regeneration)
 //   POST test     { draft_id }                       → { draft }   starts the private background test game
-//   POST publish  { draft_id, message }                → { draft, ref, publish, granted }  only in "testing success"
-//                  (an npc / building / monster: the bundle on players/<team>/<id> of chaosD6-GameModels, then the vote)
+//   POST publish  { draft_id, message, without_review? } → { draft, ref, publish, granted, review? }  only in "testing success"
+//                  (an npc / building / monster: the bundle on players/<team>/<id> of chaosD6-GameModels, then the vote;
+//                  it needs the 8B's review verdict of the definition — 409 code no_review — unless without_review: true)
+//   POST review   { draft_id }                       → { draft }   a GameModels draft: the 8B's review (verdict good |
+//                  needs_work + suggestions) of the definition shown, without a new test game. GameModels have no
+//                  rebalance check: the GameModels check, this verdict and the players' votes are their gate.
 //   POST delete   { draft_id }
 //   GET  proposals             → { available, proposals: [{ kind, id, name, team, branch, commit, sha256, author, signature_ok, bundle, votes, mine, own }] }
 //   POST proposals/refresh     → rad sync <GameModels rid> --fetch --seed <OCI>   (the OCI seed only)
@@ -90,7 +94,7 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
     if (sound && !c.sounds.some(s => s.path === sound)) fail(400, 'that sound is not in the chaosD6-Resources catalogue');
     return sprite || sound ? { sprite, sound } : null;
   };
-  const call = (fn) => { try { return fn(); } catch (e) { if (e.status) fail(e.status, e.message); throw e; } };
+  const call = (fn) => { try { return fn(); } catch (e) { if (e.status) fail(e.status, e.message, e.code ? { code: e.code } : undefined); throw e; } };
   const draftOf = (b) => { const d = jobs.get(b.draft_id); if (!d) fail(404, 'no such draft'); return d; };
   const route = `${req.method} ${sub}`;
   const m = /^GET drafts\/(gen_[a-z0-9]{6,20})$/.exec(route);
@@ -205,6 +209,12 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
       draftOf(b);
       return sendJson(res, 200, { ok: true, draft: call(() => jobs.test(b.draft_id)) });
     }
+    case 'POST review': {
+      requireLogin(ctx);
+      const b = await readJsonBody(req);
+      draftOf(b);
+      return sendJson(res, 200, { ok: true, draft: call(() => jobs.review(b.draft_id)) });
+    }
     case 'POST delete': {
       requireLogin(ctx);
       const b = await readJsonBody(req);
@@ -215,7 +225,7 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
       const s = requireLogin(ctx);
       const b = await readJsonBody(req);
       draftOf(b);
-      const d = call(() => jobs.beginPublish(b.draft_id));
+      const d = call(() => jobs.beginPublish(b.draft_id, { withoutReview: b.without_review === true }));
       const kind = d.kind;
       if (GM_KINDS.includes(kind)) {
         // a GameModels bundle: checked again against the repo as it is now (main may have moved since the test), then one
@@ -229,8 +239,9 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
           r = await publishGameModels({ bundle: { id: d.def.id, name: d.def.name, version: d.def.version, kind }, defs, identity: s.identity, team: s.team,
             message: (typeof b.message === 'string' && b.message.trim() ? b.message : `${kind}: ${d.def.name}`).slice(0, 200) }, ctx.publish || {});
         } catch (e) { jobs.endPublish(d.draft_id, { ok: false, error: e.message }); throw e; }
-        const done = jobs.endPublish(d.draft_id, { ok: true, info: { ...(r.ref || {}), state: r.publish?.state || null, error: r.publish?.error || null, granted: 0 } });
-        return sendJson(res, 200, { ok: true, draft: done, ref: r.ref, publish: r.publish, granted: [] });
+        const review = d.review?.verdict ? { verdict: d.review.verdict, summary: d.review.summary, model: d.review.model || null, at: d.review.at } : null;
+        const done = jobs.endPublish(d.draft_id, { ok: true, info: { ...(r.ref || {}), state: r.publish?.state || null, error: r.publish?.error || null, granted: 0, review, ...(review ? {} : { without_review: true }) } });
+        return sendJson(res, 200, { ok: true, draft: done, ref: r.ref, publish: r.publish, granted: [], review });
       }
       let v, r;
       try {

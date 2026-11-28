@@ -184,8 +184,13 @@ export async function proposalTestCatalog({ storageDir = gmStorageDir(), profile
   const base = loadGameModels(GAMEMODELS_DIR);
   let m = base;
   const used = [];
-  for (const p of l.proposals) {
-    if (used.length >= max || p.own || !p.signature_ok || used.some(u => u.id === p.id)) continue;
+  // user 2026-11-28: the ones I met in a game come first (profile met_gamemodels, by branch — the branch tip is the
+  // latest version); a version whose votes say "needs rework" is not played until its author updates it
+  let met = new Set();
+  try { met = new Set((JSON.parse(fs.readFileSync(profileFile, 'utf8')).met_gamemodels || []).map(x => `${x.id}:${x.ref?.branch || ''}`)); } catch {}
+  const order = [...l.proposals.filter(p => met.has(`${p.id}:${p.branch}`)), ...l.proposals.filter(p => !met.has(`${p.id}:${p.branch}`))];
+  for (const p of order) {
+    if (used.length >= max || p.own || !p.signature_ok || p.votes?.review || used.some(u => u.id === p.id)) continue;
     if (!checkBundle(p.bundle, { m: base }).ok) continue;   // one that no longer fits main is skipped
     m = overlay(m, p.bundle);
     used.push({ kind: p.kind, id: p.id, name: p.name, team: p.team, ref: p.ref });
@@ -196,7 +201,7 @@ export async function proposalTestCatalog({ storageDir = gmStorageDir(), profile
   fs.writeFileSync(file, JSON.stringify(compileCatalog(m)) + '\n');
   const env = { GAMEMODELS_CATALOG_FILE: file, GAMEMODELS_PROPOSALS: JSON.stringify(used.map(u => u.ref)) };
   const npc = used.find(u => u.kind === 'npc'), mon = used.find(u => u.kind === 'monster');
-  const nb = npc && l.proposals.find(p => p.id === npc.id)?.bundle;
+  const nb = npc && order.find(p => p.id === npc.id)?.bundle;
   if (nb?.place?.village) Object.assign(env, { GAMEMODELS_TEST_VILLAGE: nb.place.village, GAMEMODELS_TEST_NPC: npc.id, TEST_NEAR_VILLAGE: '1' });
   else { const bld = used.find(u => u.kind === 'building'); const bb = bld && l.proposals.find(p => p.id === bld.id)?.bundle; if (bb?.place?.village) Object.assign(env, { GAMEMODELS_TEST_VILLAGE: bb.place.village, TEST_NEAR_VILLAGE: 'inside' }); }
   if (mon) env.TEST_FOES = mon.id;

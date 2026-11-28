@@ -349,6 +349,84 @@ async function publishGmBridge({ rid, branch, files, manifest, body, team, ident
   finally { clearTimeout(t); }
 }
 
+// ------------------------------------------------------------------ the vote collection + "Publish to main" (2026-11-28)
+// User ruling A: "After the positive vote of 10 people over 6 from 10, you will be able to publish it. So it got merged to
+// the main, or at least PR if the merge is a security issue." publishable = proposal-votes.mjs publishableFlag. The engine
+// is tools/oci/proposals-merge.mjs (imported lazily: the phone bundle never merges): a delegate of the repo (this node's
+// NID in the identity document of the local Radicle storage, threshold 1) merges into main through the repo-side
+// pipeline; anyone else opens a Radicle patch for the maintainer. A version that needs rework is refused.
+// Test hooks (besides the publish ones): storageDirFor(kind), repoDirFor(kind), nid (this node's NID), runPublish,
+// dry (force DRY), radSync: false (no announce after a patch).
+const mergeEngine = () => import('./tools/oci/proposals-merge.mjs');
+const recKind = (rec) => (rec.kind === 'gamemodels' ? 'gamemodels' : rec.kind);
+const profileFileOf = (hooks) => hooks.profileFile || path.join(dirOf(hooks), 'profile.json');
+function versionRef(rec) { return { branch: rec.branch, id: rec.id, sha256: rec.sha256, commit: rec.commit || undefined }; }
+
+/** listMine + each record's vote collection (the cached collections, folded with the storage's votes when it is here):
+ *  votes: { n, mean, positive, share, needs_rework, publishable, top_tags[] }, main: what happened on "Publish to main". */
+export async function listMineWithVotes(teamSlug, hooks = {}) {
+  const status = loadStatus(hooks);
+  let M = null;
+  try { M = await mergeEngine(); } catch { M = null; }
+  const P = await import('./proposal-votes.mjs');
+  return listMine(teamSlug, hooks).map((it) => {
+    const rec = status.defs[`${it.kind}:${it.id}`] || {};
+    let agg;
+    if (M) agg = M.collectionOfVersion(recKind(rec), versionRef(rec), { storageDir: hooks.storageDirFor ? hooks.storageDirFor(recKind(rec)) : M.storageDirOf(recKind(rec)), profileFile: profileFileOf(hooks) });
+    else agg = P.collectionOf({ kind: recKind(rec), repo: rec.kind === 'gamemodels' ? undefined : rec.repo, branch: rec.branch, id: rec.id, sha256: rec.sha256 }, profileFileOf(hooks));
+    const votes = M ? M.voteSummary(agg) : { n: agg.n | 0, mean: agg.mean, positive: agg.positive | 0, share: agg.n ? Math.round(100 * agg.positive / agg.n) : null, needs_rework: !!agg.review, publishable: !!agg.publishable, top_tags: [] };
+    return { ...it, ...(rec.gm_kind ? { gm_kind: rec.gm_kind } : {}), votes, main: rec.main || null, can_main: M ? !M.gateOf(agg) : false };
+  });
+}
+
+/** "Publish to main" of one of MY published versions (POST definitions/main). dry → every check, nothing changes.
+ *  → { ok, mode: 'merge'|'patch', dry, votes, steps[], commands[], rights: { can, why }, error?, merged?, patch? } */
+export function publishToMain({ kind, id, identity, team, dry = false, force = false }, hooks = {}) {
+  return serial(async () => {
+    const key = `${kind}:${id}`;
+    const status = loadStatus(hooks);
+    const rec = status.defs[key];
+    if (!rec) return { ok: false, error: `no published ${kind} ${id} on this node` };
+    if (rec.slug !== team?.slug) return { ok: false, error: `${id} belongs to team ${rec.team}` };
+    if (rec.publish?.state !== 'published' || !rec.commit) return { ok: false, error: 'its branch is not published yet — retry the publish first (the votes are on the published branch)' };
+    if (publishVia(hooks) === 'bridge') return { ok: false, error: 'publishing to main is done from a desktop node (git + rad); this phone cannot merge or open a patch yet' };
+    const M = await mergeEngine();
+    const K = recKind(rec);
+    dry = !!(dry || hooks.dry || process.env.PROPOSALS_MERGE_DRY === '1');
+    const storageDir = hooks.storageDirFor ? hooks.storageDirFor(K) : M.storageDirOf(K);
+    const agg = M.collectionOfVersion(K, versionRef(rec), { storageDir, profileFile: profileFileOf(hooks), fresh: true });   // the votes as they are now
+    const votes = M.voteSummary(agg);
+    const gate = M.gateOf(agg, { force: false });   // the editor never forces: only the maintainer tool has --force
+    if (gate) return { ok: false, error: gate, votes };
+    const { localNodeNid } = await import('./proposal-votes.mjs');
+    const nid = hooks.nid !== undefined ? hooks.nid : localNodeNid();
+    const rights = M.mergeRights({ storageDir, nid });
+    const gitdir = path.join(dirOf(hooks), 'editor-defs-git', `${ridBare(rec.repo)}.git`);
+    if (!fs.existsSync(path.join(gitdir, 'HEAD'))) return { ok: false, error: `the work repo ${gitdir} is gone — retry the publish first`, votes };
+    const env = toolEnv(hooks.env);
+    let r;
+    if (rights.can) {
+      r = await M.mergeProposal({ kind: K, source: gitdir, srcRef: `refs/heads/${rec.branch}`, mainSource: storageDir, expect: { id: rec.id, sha256: rec.sha256, commit: rec.commit }, agg,
+        repoDir: hooks.repoDirFor ? hooks.repoDirFor(K) : M.repoDirOf(K, env), dry, env, ...(hooks.runPublish ? { runPublish: hooks.runPublish } : {}),
+        message: `Merge ${rec.id} ${rec.version || rec.def?.version || ''} of team ${rec.team} (votes ${votes.n}, ${votes.share} % positive)`.replace(/\s+/g, ' ') });
+    } else {
+      const title = `${rec.id} ${rec.version || rec.def?.version || ''}: ${rec.name || rec.id} — team ${rec.team} (votes ${votes.n}, ${votes.share} % positive)`.replace(/\s+/g, ' ').slice(0, 200);
+      const body = `Proposal ${rec.branch} @${rec.commit.slice(0, 8)} is publishable by the players' votes: ${votes.n} votes, ${votes.positive} positive (${votes.share} %), mean ${votes.mean}.${votes.top_tags.length ? ` Tags: ${votes.top_tags.map(t => `${t.label} ×${t.n}`).join(', ')}.` : ''}\nMerge it with tools/oci/proposals-merge.sh merge --kind ${K} --branch ${rec.branch}`;
+      r = await M.openPatch({ kind: K, gitdir, commit: rec.commit, title, body, dry, radSync: hooks.radSync !== false, env });
+    }
+    const out = { ...r, votes, rights: { can: rights.can, why: rights.why, delegates: rights.delegates, threshold: rights.threshold } };
+    if (!dry) {
+      const st = loadStatus(hooks);
+      if (st.defs[key]) {
+        st.defs[key].main = { mode: r.mode, state: r.ok ? (r.mode === 'merge' ? 'merged' : 'patch') : 'failed', at: (hooks.now || (() => new Date()))().toISOString(), sha256: rec.sha256,
+          ...(r.merged?.commit ? { commit: r.merged.commit } : {}), ...(r.patch ? { patch: r.patch } : {}), ...(r.error ? { error: String(r.error).slice(0, 300) } : {}) };
+        saveStatus(st, hooks);
+      }
+    }
+    return out;
+  });
+}
+
 /** Re-run the publish of a stored definition (POST definitions/retry). */
 export async function retryDefinition({ kind, id, identity, team }, hooks = {}) {
   const rec = loadStatus(hooks).defs[`${kind}:${id}`];

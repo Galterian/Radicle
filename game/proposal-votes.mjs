@@ -4,6 +4,11 @@
 // Follow-up rulings 2026-11-17: (1) no vote from the author; (2) popup the first time (HUD); (3) publish
 // automatically after each vote, OCI seed only; (4) n ≥ 10 and mean ≤ −3 → `review` flag; (5) votes do not
 // carry over to a new version. Full contract: game/effects-data/PROPOSAL_VOTES.md.
+// User answers 2026-11-28: (6) every vote may carry TAGS (TAGS below; effects, skills, classes and GameModels alike) that
+// say what is wrong or right with it; (7) the review flag now means NEEDS REWORK: that version is not played (the
+// caster's side leaves it out — never the resolver) until its author pushes a new version, which starts at 0 votes;
+// (8) PUBLISHABLE = n ≥ 10 and more than 60 % of the votes positive (> 0): the author may merge it to main (or open a
+// patch when they cannot merge). GameModels have no rebalance check — votes (+ the 8B review) are their only gate.
 //
 // A FOREIGN definition = an effect / skill / class taken from a player branch players/<who>/<slug> of
 // chaosD6-Effects / chaosD6-Skills / chaosD6-Classes (defs-repo.mjs refs). Every player who meets one in a
@@ -36,6 +41,12 @@ import { idFromPrivateKeyPem, rawPublicKeyFromId, idFromRawPublicKey, generateId
 export const VALUE_MIN = -6, VALUE_MAX = 6;
 export const COMMENT_MAX = 500;
 export const REVIEW_MIN_VOTES = 10, REVIEW_MEAN_MAX = -3;   // ruling (4): below 10 votes, no effect
+export const PUBLISH_MIN_VOTES = 10, PUBLISH_POSITIVE_SHARE = 0.6;   // ruling (8): more than 6 of 10 voters positive
+// ruling (6): what a voter may tick beside the number (any vote, any kind); unknown tags are dropped, not refused
+export const TAGS = Object.freeze(['overpowered', 'weak', 'too_simple', 'out_of_theme', 'duplicate', 'confusing', 'buggy', 'fun', 'well_themed', 'creative']);
+export const TAG_LABELS = Object.freeze({ overpowered: 'Overpowered', weak: 'Weak', too_simple: 'Too simple', out_of_theme: 'Too out of theme',
+  duplicate: 'Duplicating another', confusing: 'Confusing', buggy: 'Buggy / does not work', fun: 'Fun', well_themed: 'Fits the theme', creative: 'Creative' });
+export const normalizeTags = (x) => [...new Set((Array.isArray(x) ? x : []).map(s => String(s || '').trim().toLowerCase()).filter(s => TAGS.includes(s)))].sort();
 // gamemodels (2026-11-25): a GameModels bundle on players/<team>/<id> of chaosD6-GameModels (an NPC + its quests, a
 // building, a monster — editor-publish.mjs publishGameModels); id = the bundle's main definition (npc_ / bld_ / mon_)
 export const KINDS = ['effect', 'skill', 'class', 'gamemodels'];
@@ -127,6 +138,7 @@ export function validateVote(v) {
   const at = String(v.at || '');
   if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/.test(at) || Number.isNaN(Date.parse(at))) fail('at', 'bad vote time');
   const out = { ...t, voter, value, comment, at };
+  const tags = normalizeTags(v.tags); if (tags.length) out.tags = tags;   // ruling (6)
   if (NID_RE.test(String(v.voter_nid || ''))) out.voter_nid = v.voter_nid;
   const name = clip(v.voter_name, 60); if (name) out.voter_name = name;
   const hs = [...new Set((Array.isArray(v.voter_handles) ? v.voter_handles : []).map(h => clip(h, 60)).filter(Boolean))].slice(0, 12);
@@ -162,17 +174,23 @@ export const dedupeVotes = (votes) => (votes || []).reduce((acc, v) => { try { r
  *  Only that exact version counts (ruling 5: no carry-over). review = n ≥ 10 and mean ≤ −3 (ruling 4). */
 export function aggregate(votes, key = null) {
   const vs = dedupeVotes(votes).filter(v => !key || v.key === key);   // dedupe first: it derives each vote's key
-  if (!vs.length) return { n: 0, mean: null, min: null, max: null, review: false, negatives: [] };
+  if (!vs.length) return { n: 0, mean: null, min: null, max: null, positive: 0, review: false, publishable: false, tags: {}, negatives: [] };
   const vals = vs.map(v => v.value);
   const mean = Math.round((vals.reduce((a, b) => a + b, 0) / vs.length) * 100) / 100;
   return {
-    n: vs.length, mean, min: Math.min(...vals), max: Math.max(...vals),
+    n: vs.length, mean, min: Math.min(...vals), max: Math.max(...vals), positive: vals.filter(x => x > 0).length,
     review: reviewFlag({ n: vs.length, mean }),
+    publishable: publishableFlag({ n: vs.length, mean, positive: vals.filter(x => x > 0).length }),
+    tags: vs.reduce((o, v) => { for (const g of v.tags || []) o[g] = (o[g] || 0) + 1; return o; }, {}),
     negatives: vs.filter(v => v.value < 0).sort((a, b) => a.value - b.value || String(a.at).localeCompare(String(b.at)))
       .map(v => ({ voter: v.voter, ...(v.voter_name ? { voter_name: v.voter_name } : {}), value: v.value, comment: v.comment, at: v.at })),
   };
 }
 export const reviewFlag = (agg) => !!agg && (agg.n | 0) >= REVIEW_MIN_VOTES && typeof agg.mean === 'number' && agg.mean <= REVIEW_MEAN_MAX;
+/** Ruling (7): a version flagged for review needs rework and is not played. */
+export const needsRework = reviewFlag;
+/** Ruling (8): n ≥ 10 and more than 60 % of the votes positive (never while it needs rework). */
+export const publishableFlag = (agg) => !!agg && (agg.n | 0) >= PUBLISH_MIN_VOTES && Number.isFinite(agg.positive) && agg.positive / agg.n > PUBLISH_POSITIVE_SHARE && !reviewFlag(agg);
 /** { <key>: collection } for every key present. */
 export function aggregateAll(votes) {
   const vs = dedupeVotes(votes);
@@ -190,6 +208,7 @@ export function verdictWithVotes(verdict, agg) {
   const base = typeof verdict === 'object' && verdict ? { ...verdict } : { verdict: verdict ?? null };
   base.votes = agg ? { n: agg.n | 0, mean: agg.mean ?? null } : { n: 0, mean: null };
   base.review = reviewFlag(agg);
+  base.publishable = publishableFlag(agg);
   return base;
 }
 
@@ -324,13 +343,13 @@ export function whoAmI({ profileFile = '', peerId = '', nid = '', name = '', tea
 }
 
 /** Record MY vote (latest replaces earlier) in the local store; returns { vote, votes }. Refuses author votes. */
-export function recordVote({ ref, value, comment = '', profileFile = '', name = '', team = '', nid = '', dimension = '', door = '', peerId = '', now = new Date() }) {
+export function recordVote({ ref, value, comment = '', tags = [], profileFile = '', name = '', team = '', nid = '', dimension = '', door = '', peerId = '', now = new Date() }) {
   const file = votesFile(profileFile);
   const target = normalizeTarget(ref);
   const me = whoAmI({ profileFile, peerId, nid, name, team, create: true });
   const why = authorConflict(target, me);
   if (why) fail('author', why);
-  let v = { ...target, voter: me.voter, value, comment, at: now.toISOString(), voter_name: name, dimension, door,
+  let v = { ...target, voter: me.voter, value, comment, tags: normalizeTags(tags), at: now.toISOString(), voter_name: name, dimension, door,
     ...(me.nid ? { voter_nid: me.nid } : {}), voter_handles: me.handles };
   v = me.privateKeyPem ? signVote(me.privateKeyPem, v) : validateVote(v);
   const votes = upsertVote(loadVotes(file), v);
@@ -343,7 +362,7 @@ export function myVotesForUI(votes, status = null) {
   return Object.fromEntries(dedupeVotes(votes).map(v => {
     const pub = publishStateOf(v, status);
     const r = status?.repos?.[ridOf(v)];
-    return [v.key, { value: v.value, comment: v.comment, at: v.at, pub, ...(pub === 'pending' && r?.error ? { pub_error: r.error } : {}) }];
+    return [v.key, { value: v.value, comment: v.comment, tags: v.tags || [], at: v.at, pub, ...(pub === 'pending' && r?.error ? { pub_error: r.error } : {}) }];
   }));
 }
 
@@ -414,12 +433,12 @@ export function saveCollections(votes, file = collectedFile(), now = new Date())
 export function collectionOf(ref, profileFile = '') {
   let key; try { key = voteKey(normalizeTarget(ref)); } catch { return aggregate([]); }
   const a = loadCollections(collectedFile(profileFile)).collections[key];
-  return a ? { ...a, review: reviewFlag(a) } : aggregate([]);   // review re-derived: never trust a cached flag
+  return a ? { ...a, review: reviewFlag(a), publishable: publishableFlag(a) } : aggregate([]);   // flags re-derived: never trust a cached flag
 }
-/** HUD summary: { <key>: { n, mean, review } }. */
+/** HUD summary: { <key>: { n, mean, positive, review, publishable, tags } }. */
 export function collectionsForUI(profileFile = '') {
   const c = loadCollections(collectedFile(profileFile)).collections;
-  return Object.fromEntries(Object.entries(c).map(([k, a]) => [k, { n: a?.n | 0, mean: a?.mean ?? null, review: reviewFlag(a) }]));
+  return Object.fromEntries(Object.entries(c).map(([k, a]) => [k, { n: a?.n | 0, mean: a?.mean ?? null, positive: a?.positive | 0, review: reviewFlag(a), publishable: publishableFlag(a), tags: a?.tags || {} }]));
 }
 /** Wrap a creation validator (def, ref) → verdict: the verdict itself (±10 % tolerance) is untouched; the players'
  *  collection only adds { votes: {n, mean}, review } (review only when n ≥ 10 and mean ≤ −3). */
@@ -433,7 +452,7 @@ export function validatorWithVotes(validate, { profileFile = '' } = {}) {
 //   hello add-on: { kind: 'proposal_votes', mine, me, collections, limits, publish }. No game state is touched.
 export function pvHandle(m, ctx = {}) {
   try {
-    const { vote, votes } = recordVote({ ref: m.ref, value: Number(m.value), comment: m.comment, ...ctx });
+    const { vote, votes } = recordVote({ ref: m.ref, value: Number(m.value), comment: m.comment, tags: m.tags, ...ctx });
     const mode = vote.sig ? schedulePublish(ctx) : 'local';
     return { kind: 'proposal_vote_saved', ok: true, key: vote.key, publish: mode, mine: myVotesForUI(votes, loadPublishStatus(publishFile(ctx.profileFile))) };
   } catch (e) {
@@ -449,7 +468,8 @@ export function pvHello(ctx = {}, { retry = true } = {}) {
   const me = whoAmI({ ...ctx, create: false });
   return { kind: 'proposal_votes', mine, me: { voter: me.voter, nid: me.nid, handles: me.handles }, publish: publishMode(),
     collections: collectionsForUI(ctx.profileFile),
-    limits: { min: VALUE_MIN, max: VALUE_MAX, comment_max: COMMENT_MAX, review_min_votes: REVIEW_MIN_VOTES, review_mean_max: REVIEW_MEAN_MAX } };
+    limits: { min: VALUE_MIN, max: VALUE_MAX, comment_max: COMMENT_MAX, review_min_votes: REVIEW_MIN_VOTES, review_mean_max: REVIEW_MEAN_MAX,
+      publish_min_votes: PUBLISH_MIN_VOTES, publish_positive_share: PUBLISH_POSITIVE_SHARE }, tags: TAGS.map(id => ({ id, label: TAG_LABELS[id] })) };
 }
 
 // ---------------------------------------------------------------------------------------------

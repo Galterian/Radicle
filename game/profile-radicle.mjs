@@ -53,6 +53,12 @@ export function mergeProfiles(local, remote) {
   const cls = new Map();
   for (const x of [...(R.custom_classes || []), ...(L.custom_classes || [])]) if (x?.id && (!cls.has(x.id) || String(x.at || '') >= String(cls.get(x.id).at || ''))) cls.set(x.id, structuredClone(x));
   if (cls.size) out.custom_classes = [...cls.values()].sort((a, b) => a.id.localeCompare(b.id));
+  // met proposals (profile.mjs addMetClass / addMetGameModel, 2026-11-28): a union per proposal branch, the later `at` wins
+  for (const k of ['met_classes', 'met_gamemodels']) {
+    const m = new Map(), keyOf = (x) => `${x.id}:${x.ref?.branch || x.ref?.sha256 || x.ref?.commit || ''}`;
+    for (const x of [...(R[k] || []), ...(L[k] || [])]) if (x?.id && (!m.has(keyOf(x)) || String(x.at || '') >= String(m.get(keyOf(x)).at || ''))) m.set(keyOf(x), structuredClone(x));
+    if (m.size) out[k] = [...m.values()].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
+  }
   const orderAt = first.order_at || second.order_at;
   if (orderAt) out.order_at = orderAt;
   for (const c of out.characters) c.team = out.team_name;

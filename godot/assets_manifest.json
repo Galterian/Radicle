@@ -1,6 +1,6 @@
 {
-  "generated": "2026-11-28T10:13:01.072Z",
-  "total_bytes": 631054693,
+  "generated": "2026-11-28T13:57:53.265Z",
+  "total_bytes": 631672016,
   "count": 4154,
   "missing": 0,
   "entries": [
@@ -16436,7 +16436,7 @@
     },
     {
       "path": "assets/gamemodels/catalog.json",
-      "size": 1959027,
+      "size": 1970841,
       "src": "code"
     },
     {
@@ -20376,402 +20376,402 @@
     },
     {
       "path": "game/effects-data/effects/effect_aging.json",
-      "size": 5064,
+      "size": 10467,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_anger.json",
-      "size": 6660,
+      "size": 10884,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_artifice.json",
-      "size": 6138,
+      "size": 15574,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_aura.json",
-      "size": 4878,
+      "size": 8826,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_awake.json",
-      "size": 9624,
+      "size": 26991,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_awe.json",
-      "size": 6164,
+      "size": 10166,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_balefire.json",
-      "size": 5658,
+      "size": 10074,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_banish.json",
-      "size": 6894,
+      "size": 23696,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_blessing_curse.json",
-      "size": 5670,
+      "size": 10616,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_blizzard.json",
-      "size": 4753,
+      "size": 9028,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_combustion.json",
-      "size": 6355,
+      "size": 13325,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_confusion.json",
-      "size": 5334,
+      "size": 9375,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_creation.json",
-      "size": 8480,
+      "size": 21332,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_dark_matter.json",
-      "size": 6007,
+      "size": 12482,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_delay_time.json",
-      "size": 4621,
+      "size": 8591,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_disable.json",
-      "size": 5076,
+      "size": 9340,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_disruption.json",
-      "size": 5025,
+      "size": 10360,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_domination.json",
-      "size": 6074,
+      "size": 10043,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_drain.json",
-      "size": 5738,
+      "size": 11744,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_earthquake.json",
-      "size": 6691,
+      "size": 11362,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_elementals_air.json",
-      "size": 7176,
+      "size": 12387,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_elementals_earth.json",
-      "size": 7015,
+      "size": 12207,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_elementals_water.json",
-      "size": 6903,
+      "size": 12052,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_emotions_bombard.json",
-      "size": 4691,
+      "size": 8974,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_empower.json",
-      "size": 4442,
+      "size": 8496,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_fear.json",
-      "size": 6307,
+      "size": 10309,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_fireball.json",
-      "size": 6357,
+      "size": 13647,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_fossilization.json",
-      "size": 10371,
+      "size": 44123,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_golems_air.json",
-      "size": 7355,
+      "size": 12597,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_golems_earth.json",
-      "size": 7277,
+      "size": 12469,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_golems_water.json",
-      "size": 7549,
+      "size": 12834,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_harm.json",
-      "size": 6758,
+      "size": 13418,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_haste.json",
-      "size": 4871,
+      "size": 9366,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_ice_blast.json",
-      "size": 6315,
+      "size": 12948,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_inner_fire.json",
-      "size": 4031,
+      "size": 7821,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_invisibility.json",
-      "size": 7117,
+      "size": 14862,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_light_darkness.json",
-      "size": 4983,
+      "size": 8463,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_lightning.json",
-      "size": 5796,
+      "size": 12320,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_love.json",
-      "size": 6440,
+      "size": 10442,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_metaphysics.json",
-      "size": 4846,
+      "size": 10169,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_meteor_shower.json",
-      "size": 4568,
+      "size": 8769,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_mind_blast.json",
-      "size": 5325,
+      "size": 11077,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_mists.json",
-      "size": 6301,
+      "size": 10396,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_mutate.json",
-      "size": 6292,
+      "size": 21908,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_nature_embrace.json",
-      "size": 4233,
+      "size": 8287,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_oblivion.json",
-      "size": 6017,
+      "size": 12703,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_petrify.json",
-      "size": 6384,
+      "size": 10532,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_phantom.json",
-      "size": 4358,
+      "size": 7523,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_poison.json",
-      "size": 5032,
+      "size": 9944,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_possess_phylactery.json",
-      "size": 7981,
+      "size": 15699,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_potion_brew.json",
-      "size": 4922,
+      "size": 10118,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_resurrect_death_ward.json",
-      "size": 6901,
+      "size": 13423,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_shield.json",
-      "size": 4484,
+      "size": 8366,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_sleep.json",
-      "size": 5277,
+      "size": 9350,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_sound_wave.json",
-      "size": 4851,
+      "size": 10048,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_space_bending.json",
-      "size": 6817,
+      "size": 19284,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_spirit_link.json",
-      "size": 8431,
+      "size": 17256,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_summoning.json",
-      "size": 6561,
+      "size": 12125,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_super_force.json",
-      "size": 5449,
+      "size": 13725,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_super_sense.json",
-      "size": 4739,
+      "size": 8272,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_teleportation.json",
-      "size": 5566,
+      "size": 17322,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_the_void.json",
-      "size": 4826,
+      "size": 8275,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_throw.json",
-      "size": 6539,
+      "size": 26185,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_traps_mastery.json",
-      "size": 5640,
+      "size": 11610,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_turn_life.json",
-      "size": 5442,
+      "size": 12713,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_vision.json",
-      "size": 4737,
+      "size": 11029,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_barricade.json",
-      "size": 3987,
+      "size": 7565,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_battle_trance.json",
-      "size": 6815,
+      "size": 42403,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_bluff.json",
-      "size": 4767,
+      "size": 13682,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_counter_spell.json",
-      "size": 7931,
+      "size": 36246,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_disruption_move.json",
-      "size": 5763,
+      "size": 17477,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_dodge.json",
-      "size": 4222,
+      "size": 12017,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_force_shield.json",
-      "size": 5570,
+      "size": 12074,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_grapple.json",
-      "size": 4363,
+      "size": 9833,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_intimidation.json",
-      "size": 4728,
+      "size": 14828,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_overrun.json",
-      "size": 5788,
+      "size": 19540,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_powerful_attack.json",
-      "size": 5334,
+      "size": 10723,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_ranged_weapon.json",
-      "size": 5807,
+      "size": 11209,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_sanctuary.json",
-      "size": 6451,
+      "size": 17903,
       "src": "code"
     },
     {
       "path": "game/skills-data/skills/skill_taunt.json",
-      "size": 5797,
+      "size": 12390,
       "src": "code"
     }
   ]

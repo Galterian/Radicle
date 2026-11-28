@@ -259,7 +259,7 @@ export function gateBuiltins(units, keyOf) {
 
 // ------------------------------------------------------------------ the peer adapter (peer.mjs glue)
 const envMs = (name, dflt) => { const v = Number(process.env[name]); return Number.isFinite(v) && v >= 0 ? v : dflt; };
-export async function createClPeer({ selfId, label = selfId, dimId, ui = () => {}, log: logIn = null, nameOf = () => null, validate: validateIn, onReady = null } = {}) {
+export async function createClPeer({ selfId, label = selfId, dimId, ui = () => {}, log: logIn = null, nameOf = () => null, validate: validateIn, onReady = null, onLearned: learnedOut = null } = {}) {
   const log = logIn || ((line) => console.log(`[${label}] cl: ${line}`));
   const bundled = bundledClassSet();
   let validate = validateIn ?? null, validatorInfo = validateIn ? 'injected' : 'none';
@@ -288,7 +288,7 @@ export async function createClPeer({ selfId, label = selfId, dimId, ui = () => {
   const sync = createClSync({
     selfId, store, cache, fallbackFetchers, log, opts: process.env.CL_PREFETCH === '0' ? { prefetch: false } : {},
     request: (peerId, msg) => (request ? request(peerId, msg) : Promise.reject(Object.assign(new Error('no transport yet'), { code: 'NO_ROUTE' }))),
-    onLearned: (p, src) => { log(`learned ${p.ref.id} (${prefixOf(p.ref.sha256)}, ${p.ref.branch || 'no branch'}, verdict ${p.verdict}) from ${src}`); notice('learned', p, src && !['cache', 'fallback', 'local', 'bundled'].includes(src) ? src : null); },
+    onLearned: (p, src) => { log(`learned ${p.ref.id} (${prefixOf(p.ref.sha256)}, ${p.ref.branch || 'no branch'}, verdict ${p.verdict}) from ${src}`); notice('learned', p, src && !['cache', 'fallback', 'local', 'bundled'].includes(src) ? src : null); try { learnedOut?.(p, src); } catch {} },
     onShared: (p, peer) => { log(`shared ${p.ref.id} (${prefixOf(p.ref.sha256)}) with ${peer}`); notice('shared', p, peer); },
   });
   const REVEAL_WAIT = envMs('CL_REVEAL_WAIT_MS', 1500), RESOLVE_WAIT = envMs('CL_RESOLVE_WAIT_MS', 4000), BOOT_WAIT = envMs('CL_BOOT_WAIT_MS', 8000);

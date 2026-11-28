@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Test a generated GameModels draft (a village NPC or building, gm-gen.mjs bundle) in a PRIVATE background game
 // (2026-11-25, the editor's "test preview" for the npc / building kinds; user: "Test game + 8B review").
-//   node tools/gm-gen-test.mjs <bundle.json> [--minutes 3] [--games 2] [--out result.json] [--review] [--every 10]
+//   node tools/gm-gen-test.mjs <bundle.json> [--minutes 3] [--games 2] [--out result.json] [--review] [--every 10] [--llm-file <llm.json>]
 // The repo's definitions with the bundle laid over them (gm-gen.mjs overlay) are compiled into a catalog of this test
 // only (GAMEMODELS_CATALOG_FILE) — the repo and assets/gamemodels/catalog.json are never written. A launcher of its own
 // (ui-server.mjs LAUNCHER_MODE=1, a free UI_PORT, a throw-away profile dir) starts a Test Random game whose spawn village
@@ -14,7 +14,9 @@
 // writes no log line of its own — the result says so).
 // A monster: foe-1 is that creature (TEST_FOES, its card from the test's catalog); the bot hunts it. Pass = foe-1 booted
 // with it ("monster deck: <id>"), it fought (a chase, a cast, a hit, a kill, or it died), 0 errors, 0 divergences.
-// --review: the big model reads the bundle + the conversation and returns suggestions only (dialog, stories, quests).
+// --review: the 8B (genConfig of --llm-file, default <profile dir>/llm.json: the desktop's own Qwen3-8B, else OCI's) reads the
+// bundle + the conversation and returns a VERDICT (good | needs_work) + suggestions (gm-gen.mjs reviewGameModel). GameModels
+// have no rebalance check — the GameModels check, this verdict and the players' votes are their gate.
 // Status lines "[test] m:ss …" every --every seconds; the last line is "[test] RESULT <json>". Exit 0 pass, 1 fail, 2 could not run.
 // Peers sit on 7801+ (LAUNCH_PORT_BASE), never 7357 / 7401 / 7392 / 7393; only the processes it started are stopped.
 import fs from 'node:fs';
@@ -23,17 +25,17 @@ import net from 'node:net';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { genConfig, complete, mmss } from '../effect-gen.mjs';
+import { genConfig, mmss } from '../effect-gen.mjs';
 import { profileDir } from '../profile.mjs';
 import { loadGameModels, compileCatalog, GAMEMODELS_DIR } from '../gamemodels.mjs';
-import { overlay, BUNDLE_SCHEMA } from '../gm-gen.mjs';
+import { overlay, BUNDLE_SCHEMA, reviewGameModel, checkBundle } from '../gm-gen.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GAME = path.resolve(HERE, '..');
 const args = process.argv.slice(2);
 const opt = {}; const words = [];
 for (let i = 0; i < args.length; i++) {
-  if (args[i].startsWith('--')) { const k = args[i].slice(2); if (['minutes', 'out', 'every', 'games'].includes(k)) opt[k] = args[++i]; else opt[k] = true; }
+  if (args[i].startsWith('--')) { const k = args[i].slice(2); if (['minutes', 'out', 'every', 'games', 'llm-file'].includes(k)) opt[k] = args[++i]; else opt[k] = true; }
   else words.push(args[i]);
 }
 const t0 = Date.now();
@@ -240,35 +242,15 @@ if (KIND === 'npc' && (b.quests || []).length && !s.quests) notes.push('no quest
 if (KIND === 'building') notes.push('a building writes no log line of its own — placed in the layout, the village came up, 0 errors and 0 divergences are what this test can show');
 say(`${pass ? 'PASS' : 'FAIL'} · ${brief(s)}${why.length ? ` — ${why.join('; ')}` : ''}${notes.length ? ` (${notes.join('; ')})` : ''}`);
 
-// ---- the big model's review (suggestions only) ----
+// ---- the 8B's review: a verdict (good | needs_work) + suggestions (gm-gen.mjs reviewGameModel) ----
 let review = null;
 if (opt.review) {
-  const cfg = genConfig(process.env, { file: path.join(profileDir(), 'llm.json') });
-  if (!cfg.url) review = { error: 'no big model configured' };
-  else {
-    say('asking the big model for a review of the test');
-    const schema = { type: 'object', properties: { summary: { type: 'string' }, suggestions: { type: 'array', items: { type: 'string' }, maxItems: 5 } }, required: ['summary', 'suggestions'] };
-    const def = KIND === 'monster'
-      ? { monster: { id: DEF.id, name: DEF.name, race: DEF.race, temper: DEF.temper, agenda: DEF.agenda?.uses, tags: DEF.card?.tags, data: DEF.card?.data } }
-      : KIND === 'npc'
-      ? { npc: { id: DEF.id, name: DEF.name, race: DEF.race, role: DEF.role, persona: DEF.persona, lines: DEF.lines, talk: DEF.talk }, quests: (b.quests || []).map(q => ({ name: q.name, need_text: q.need_text, rewards: q.rewards })), place: b.place }
-      : { building: { id: DEF.id, name: DEF.name, race: DEF.race, role: DEF.role, bank: DEF.bank, produces: DEF.produces, text: DEF.text }, place: b.place };
-    const ask = [
-      { role: 'system', content: KIND === 'monster'
-        ? 'You review a test game of a new wild monster of chaosD6 (a hex card game set in Warlords Battlecry 3: a monster lurks on its hex, wakes when a hero comes near and fights with its creature card — four stats, actions per round, an innate effect cast on Posture and a deck of 4 effects). The player wants it vivid and fair. Read the definition and the log lines of the fight, say in one or two sentences how it played, and give at most 5 short, concrete suggestions (each one change: its temper text, name, a stat, a deck effect, its innate effect or rider, its agenda) that would make it more fun or more distinct. Answer JSON {"summary": "...", "suggestions": ["..."]}. /no_think'
-        : KIND === 'npc'
-        ? 'You review a test game of a new villager of chaosD6 (a hex card game with villages of fantasy races). The player wants it to be vivid and descriptive: a clear voice, dialog that fits its race and role, stories with places and names, quests with a reason. Read the definition and the conversation the hero had with it, say in one or two sentences how it came across, and give at most 5 short, concrete suggestions (each one change: a line, a question and its answer, a story, a quest and its reward) that would make it more alive or more fun. Never suggest changing game rules. Answer JSON {"summary": "...", "suggestions": ["..."]}. /no_think'
-        : 'You review a test game of a new village building of chaosD6 (a hex card game with villages of fantasy races). Read the definition, say in one or two sentences how it fits its village and race, and give at most 5 short, concrete suggestions (each one change: its name, its text, its role, what it banks or produces) that would make it more descriptive or more fun. Answer JSON {"summary": "...", "suggestions": ["..."]}. /no_think' },
-      { role: 'user', content: `Definition:\n${JSON.stringify(def)}\n\nResult: ${pass ? 'passed' : `failed — ${why.join('; ')}`}; ${brief(s)}.\n\n${KIND === 'monster' ? `Fight log:\n${s.lines.slice(0, 30).join('\n') || '(none)'}\n` : ''}${KIND === 'npc' ? `Conversation:\n${s.talk.map(t => `Hero: ${t.ask}\n${NAME}: ${t.answer}`).join('\n') || '(none — the hero never talked with it)'}\n` : ''}${s.errorLines.length ? `\nErrors:\n${s.errorLines.join('\n')}` : ''}\n/no_think` },
-    ];
-    const r = await complete(cfg, ask, { schema, maxTokens: 600, temperature: 0.4 });
-    if (r.error) review = { error: r.error };
-    else {
-      try { const j = JSON.parse(r.text.slice(r.text.indexOf('{'), r.text.lastIndexOf('}') + 1)); review = { summary: String(j.summary || '').slice(0, 600), suggestions: (Array.isArray(j.suggestions) ? j.suggestions : []).map(x => String(x).slice(0, 300)).slice(0, 5) }; }
-      catch { review = { error: 'the review is not JSON' }; }
-    }
-    say(review.error ? `review: ${review.error}` : `review: ${review.summary}`);
-  }
+  const cfg = genConfig(process.env, { file: opt['llm-file'] ? path.resolve(String(opt['llm-file'])) : path.join(profileDir(), 'llm.json') });
+  say(`asking the 8B (${cfg.model}${cfg.url ? '' : ', not configured'}) for its review`);
+  let check = null;
+  try { check = checkBundle(b).check; } catch {}
+  review = await reviewGameModel(b, { cfg, check, test: { pass, why, ...s, error_lines: s.errorLines } });
+  say(review.error ? `review: ${review.error}` : `review: ${review.verdict === 'good' ? 'GOOD' : 'NEEDS WORK'} — ${review.summary}`);
 }
 const last = games.at(-1) || {};
 finish({ kind: KIND, pass, why, notes, ...s, in_layout: KIND === 'building' ? inLayout : undefined, talks_sent: talksSent, minutes, games, dimension: last.dimension, logs: last.logs, review }, pass ? 0 : lastCode === -1 ? 2 : 1);

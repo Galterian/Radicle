@@ -5,9 +5,11 @@
 // background (votes/<voter> → OCI seed only).
 //
 // WS (peer.mjs, PV hunks of tools/out/_pv_hunks.py):
-//   → { kind: 'proposal_vote', ref, value, comment }
+//   → { kind: 'proposal_vote', ref, value, comment, tags }
 //   ← { kind: 'proposal_vote_saved', ok, key, mine?, error?, code? }
-//   ← { kind: 'proposal_votes', mine, me, collections, limits, publish }   (on hello, and again after each publish run)
+//   ← { kind: 'proposal_votes', mine, me, collections, limits, publish, tags: [{id,label}] }   (on hello, and again after each publish run)
+// User answers 2026-11-28: every vote may carry TAGS (toggle chips; any kind); ⚑ review now means NEEDS REWORK — that
+// version is not playable until its author pushes a new one (0 votes again); ✓ PUBLISHABLE = n ≥ 10 and > 60 % positive.
 //
 // Surfaces:
 //   * a floating "🗳 Test votes" button (count of foreign defs not yet voted, pulses while > 0) opening a panel with
@@ -17,12 +19,19 @@
 //     "+N more"). It never takes focus by itself, so the planning hotkeys keep working until the player clicks into it;
 //     keys typed inside it never reach the game (stopPropagation), Escape = Later.
 //   * my OWN cards (ruling 1: I am the publisher namespace / the branch's <who>) get no vote control at all.
-//   * per vote: 💾 saved · ✓ published · ⏳ pending (ruling 3); ⚑ review when the collection has n ≥ 10 and mean ≤ −3 (ruling 4).
+//   * per vote: 💾 saved · ✓ published · ⏳ pending (ruling 3); ⚑ needs rework — not playable when the collection has
+//     n ≥ 10 and mean ≤ −3 (ruling 4/7); ✓ publishable (n, % positive) when n ≥ 10 and > 60 % positive (ruling 8);
+//     the 3 most frequent tags with their counts.
 // No style.css edits: the module injects its own <style>.
 import { effectSource, normalizeSource, sourceBadgeHtml, setEffectSource } from './effect_source.js';
 
 export const VALUE_MIN = -6, VALUE_MAX = 6, COMMENT_MAX = 500;   // mirror of game/proposal-votes.mjs (the peer re-validates)
 export const REVIEW_MIN_VOTES = 10, REVIEW_MEAN_MAX = -3;
+export const PUBLISH_MIN_VOTES = 10, PUBLISH_POSITIVE_SHARE = 0.6;
+// Fallback copy of proposal-votes.mjs TAGS / TAG_LABELS (the hello's `tags` wins when present).
+export const TAGS = Object.freeze(['overpowered', 'weak', 'too_simple', 'out_of_theme', 'duplicate', 'confusing', 'buggy', 'fun', 'well_themed', 'creative']);
+export const TAG_LABELS = Object.freeze({ overpowered: 'Overpowered', weak: 'Weak', too_simple: 'Too simple', out_of_theme: 'Too out of theme',
+  duplicate: 'Duplicating another', confusing: 'Confusing', buggy: 'Buggy / does not work', fun: 'Fun', well_themed: 'Fits the theme', creative: 'Creative' });
 const SHA_RE = /^[0-9a-f]{64}$/, COMMIT_RE = /^[0-9a-f]{40}$/;
 const HELLO_WAIT_MS = 3000;   // the popup waits for my votes (hello) so it does not ask about a card I already voted on
 
@@ -45,13 +54,25 @@ export function pvIsMine(src, me) {
   return [who, src.author].some(a => a && (ids.has(a) || hs.has(handleSlug(a))));
 }
 export const reviewFlag = (c) => !!c && (c.n | 0) >= REVIEW_MIN_VOTES && typeof c.mean === 'number' && c.mean <= REVIEW_MEAN_MAX;
+export const needsRework = reviewFlag;
+export const publishableFlag = (c) => !!c && (c.n | 0) >= PUBLISH_MIN_VOTES && Number.isFinite(c.positive) && c.positive / c.n > PUBLISH_POSITIVE_SHARE && !reviewFlag(c);
+export const REWORK_TEXT = '⚑ needs rework — not playable';
+export const PUBLISHABLE_TEXT = '✓ publishable';
+let _tagList = TAGS.map(id => ({ id, label: TAG_LABELS[id] }));   // replaced by the hello's `tags`
+const _tagIds = () => _tagList.map(t => t.id);
+const _tagLabel = (id) => _tagList.find(t => t.id === id)?.label || TAG_LABELS[id] || id;
+/** The `n` most frequent tags of a collection: [[tag, count], …] (count desc, then tag order). */
+export const topTags = (tags, n = 3) => Object.entries(tags || {}).filter(([, c]) => c > 0)
+  .sort((a, b) => b[1] - a[1] || _tagIds().indexOf(a[0]) - _tagIds().indexOf(b[0])).slice(0, n);
+/** Mirror of proposal-votes.mjs normalizeTags, against the current tag list. */
+export const normalizeTags = (x) => [...new Set((Array.isArray(x) ? x : []).map(s => String(s || '').trim().toLowerCase()).filter(s => _tagIds().includes(s)))].sort();
 const PUB_TEXT = { saved: '💾 saved — publishing in the background', published: '✓ published (OCI seed)', pending: '⏳ pending — kept on this device, will retry' };
 
 let _send = null, _cards = () => [];
 const _seen = new Map();      // key → { src, name, first_at }
-let _mine = {};               // key → { value, comment, at, pub, pub_error? }
+let _mine = {};               // key → { value, comment, tags, at, pub, pub_error? }
 let _me = null;               // { voter, nid, handles } from hello
-let _collections = {};        // key → { n, mean, review }
+let _collections = {};        // key → { n, mean, positive, review, publishable, tags: {tag: count} }
 let _helloAt = 0, _initAt = 0;
 const _own = new Set();       // keys the peer refused as my own (code 'author')
 const _status = new Map();    // key → { ok, text }
@@ -95,6 +116,11 @@ function _injectStyle() {
 .pv-mine{font-size:11px;color:#bdb5ff}
 .pv-pub-pending{color:#ffc46b}.pv-pub-published{color:#7bff9b}
 .pv-review{color:#ff9b5b;font-weight:bold;margin-left:4px}
+.pv-publishable{color:#7bff9b;font-weight:bold;margin-left:4px}
+.pv-toptags{display:block;font-size:11px;opacity:.85;margin-top:2px}
+.pv-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.pv-tag{padding:1px 7px;border-radius:10px;border:1px solid #555;background:#1d1b2e;color:#cfc8ff;font:11px sans-serif;cursor:pointer}
+.pv-tag.on{border-color:#8a7cff;background:#3a3270;color:#fff}
 .pv-later{margin-left:auto}`;
   document.head.appendChild(s);
 }
@@ -114,7 +140,18 @@ export function voteControl(src, { name = '', extra = [] } = {}) {
   if (col && col.n) {
     const c = document.createElement('span'); c.className = 'pv-mine'; c.textContent = ` · players ${col.mean > 0 ? '+' : ''}${col.mean} (${col.n})`;
     head.append(c);
-    if (reviewFlag(col)) { const r = document.createElement('span'); r.className = 'pv-review'; r.textContent = '⚑ review'; r.title = `${col.n} test votes, mean ${col.mean} (≤ ${REVIEW_MEAN_MAX}): flagged for review`; head.append(r); }
+    if (needsRework(col)) {
+      const r = document.createElement('span'); r.className = 'pv-review'; r.textContent = REWORK_TEXT;
+      r.title = `${col.n} test votes, mean ${col.mean} (≤ ${REVIEW_MEAN_MAX}): this version needs rework and is not played until its author pushes a new version (which starts at 0 votes)`;
+      head.append(r);
+    } else if (publishableFlag(col)) {
+      const pct = Math.round((col.positive / col.n) * 100);
+      const r = document.createElement('span'); r.className = 'pv-publishable'; r.textContent = `${PUBLISHABLE_TEXT} (${col.n} votes, ${pct} % positive)`;
+      r.title = `${col.positive} of ${col.n} test votes positive (> ${Math.round(PUBLISH_POSITIVE_SHARE * 100)} %): the author may merge it to main (or open a patch)`;
+      head.append(r);
+    }
+    const top = topTags(col.tags);
+    if (top.length) { const t = document.createElement('span'); t.className = 'pv-toptags'; t.textContent = `tags: ${top.map(([g, c]) => `${_tagLabel(g)} ×${c}`).join(' · ')}`; head.append(t); }
   }
   box.append(head);
   if (!key) { const m = document.createElement('div'); m.className = 'pv-msg'; m.textContent = 'version unknown (no sha256 / commit) — cannot vote yet'; box.append(m); return box; }
@@ -127,6 +164,15 @@ export function voteControl(src, { name = '', extra = [] } = {}) {
   row.append(document.createTextNode(String(VALUE_MIN)), range, document.createTextNode(`+${VALUE_MAX}`), val, save, ...extra);
   const ta = document.createElement('textarea');
   ta.maxLength = COMMENT_MAX; ta.value = mine?.comment || '';
+  // tags (ruling 6): toggle chips, my saved tags pre-selected
+  const picked = new Set(normalizeTags(mine?.tags));
+  const tagRow = document.createElement('div'); tagRow.className = 'pv-tags';
+  for (const t of _tagList) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = `pv-tag${picked.has(t.id) ? ' on' : ''}`; b.textContent = t.label || t.id;
+    b.dataset.tag = t.id; b.setAttribute('aria-pressed', String(picked.has(t.id)));
+    b.onclick = () => { if (picked.has(t.id)) picked.delete(t.id); else picked.add(t.id); b.classList.toggle('on', picked.has(t.id)); b.setAttribute('aria-pressed', String(picked.has(t.id))); };
+    tagRow.append(b);
+  }
   const msg = document.createElement('div'); msg.className = 'pv-msg';
   const refresh = () => {
     const v = Number(range.value);
@@ -144,13 +190,14 @@ export function voteControl(src, { name = '', extra = [] } = {}) {
     const v = Number(range.value);
     if (commentNeeded(v, ta.value)) return refresh();
     _status.set(key, { ok: true, text: 'saving…' });
-    _send?.({ kind: 'proposal_vote', ref: src, value: v, comment: ta.value.trim().slice(0, COMMENT_MAX) });
+    _send?.({ kind: 'proposal_vote', ref: src, value: v, comment: ta.value.trim().slice(0, COMMENT_MAX), tags: normalizeTags([...picked]) });
     refresh();
   };
-  box.append(row, ta, msg);
+  box.append(row, tagRow, ta, msg);
   if (mine) {
     const m = document.createElement('div'); m.className = 'pv-mine';
-    m.textContent = `your vote ${fmtVal(mine.value)} · ${new Date(mine.at).toLocaleString()} · `;
+    const myTags = normalizeTags(mine.tags);
+    m.textContent = `your vote ${fmtVal(mine.value)}${myTags.length ? ` [${myTags.map(_tagLabel).join(', ')}]` : ''} · ${new Date(mine.at).toLocaleString()} · `;
     const p = document.createElement('span'); p.className = `pv-pub-${mine.pub || 'saved'}`;
     p.textContent = PUB_TEXT[mine.pub] || PUB_TEXT.saved;
     if (mine.pub_error) p.title = mine.pub_error;
@@ -224,6 +271,11 @@ export function pvOnMessage(m) {
   if (!m) return;
   if (m.kind === 'proposal_votes') {
     _mine = m.mine || {}; _me = m.me || _me; _collections = m.collections || _collections; _helloAt = Date.now();
+    if (Array.isArray(m.tags) && m.tags.length) {
+      const tl = m.tags.map(t => (typeof t === 'string' ? { id: t } : t)).filter(t => t && /^[a-z0-9_]{1,40}$/.test(String(t.id || '')))
+        .map(t => ({ id: String(t.id), label: String(t.label || TAG_LABELS[t.id] || t.id).slice(0, 60) }));
+      if (tl.length) _tagList = tl;
+    }
     _applyReview(); _render(true); _popupTick();
   }
   if (m.kind === 'proposal_vote_saved') {
